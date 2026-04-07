@@ -307,7 +307,12 @@ tr:hover td{background:var(--surface2);}
       <div class="card">
         <div class="form-row col2">
           <div class="form-group"><div class="form-label">지점 선택</div><select id="report-branch"><option value="">전체 지점</option></select></div>
-          <div class="form-group"><div class="form-label">유형</div><select id="report-type"><option value="daily">일간</option><option value="weekly">주간</option></select></div>
+          <div class="form-group"><div class="form-label">정렬</div>
+            <select id="report-sort" style="width:140px">
+              <option value="rank">순위순</option>
+              <option value="alpha">가나다순</option>
+            </select>
+          </div><select id="report-type"><option value="daily">일간</option><option value="weekly">주간</option></select></div>
         </div>
         <button class="btn btn-primary" onclick="generateReport()">📋 보고서 생성</button>
       </div>
@@ -1321,8 +1326,10 @@ function generateReport() {
       else byKw[r.keyword].blog.push(r);
     });
 
-    // 지점에 등록된 모든 키워드 기준으로 표시
+    // 정렬
+    const sortBy = document.getElementById('report-sort')?.value || 'rank';
     const sorted = keywords.slice().sort((a,b)=>{
+      if (sortBy === 'alpha') return a.localeCompare(b, 'ko');
       const aData = byKw[a] || {blog:[], cafe:[]};
       const bData = byKw[b] || {blog:[], cafe:[]};
       const aRanks = [...aData.blog,...aData.cafe].map(r=>r.rank).filter(r=>r);
@@ -1332,9 +1339,9 @@ function generateReport() {
       return aRank - bRank;
     });
 
-    sorted.forEach(kw=>{
+    sorted.forEach((kw, idx)=>{
       const tabs = byKw[kw] || {blog:[], cafe:[]};
-      content += `  • ${kw}\n`;
+      content += `  ${String(idx+1).padStart(3, ' ')}. ${kw}\n`;
       const blogSorted = tabs.blog.filter(r=>r.rank).sort((a,b)=>a.rank-b.rank);
       content += `    [블로그] ${blogSorted.length ? blogSorted.map(r=>`${r.rank}위`).join(' / ') : '-'}\n`;
       const cafeSorted = tabs.cafe.filter(r=>r.rank).sort((a,b)=>a.rank-b.rank);
