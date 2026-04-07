@@ -222,17 +222,28 @@ tr:hover td{background:var(--surface2);}
         <div><div class="page-title">순위 현황</div></div>
         <div class="flex gap-8">
           <select id="rank-branch-filter" style="width:140px" onchange="renderRankingList()"><option value="">전체 지점</option></select>
-          <button class="btn btn-primary" onclick="runAllCheck()">🔄 순위 체크</button>
+          <select id="rank-limit-filter" style="width:120px" onchange="renderRankingList()">
+            <option value="20">20위 이내</option>
+            <option value="10">10위 이내</option>
+            <option value="0">전체 보기</option>
+          </select>
+          <button id="check-btn" class="btn btn-primary" onclick="runAllCheck()">🔄 순위 체크</button>
         </div>
       </div>
       <div id="rank-progress" style="display:none">
-        <div class="alert alert-info"><span class="spinner"></span><span id="rank-progress-text">체크 중...</span></div>
+        <div class="alert alert-info" style="justify-content:space-between">
+          <div style="display:flex;align-items:center;gap:8px"><span class="spinner"></span><span id="rank-progress-text">체크 중...</span></div>
+          <div style="display:flex;gap:8px">
+            <button id="pause-btn" class="btn btn-secondary btn-sm" onclick="togglePause()">⏸ 일시정지</button>
+            <button class="btn btn-danger btn-sm" onclick="stopCheck()">⏹ 중단</button>
+          </div>
+        </div>
         <div class="progress-bar"><div class="progress-fill" id="rank-progress-fill" style="width:0%"></div></div>
       </div>
       <div class="card">
         <div class="table-wrap">
           <table>
-            <thead><tr><th>지점</th><th>키워드</th><th>블로그</th><th>순위</th><th>변동</th><th>이전</th><th>시각</th></tr></thead>
+            <thead><tr><th>지점</th><th>키워드</th><th>탭</th><th>블로그</th><th>URL</th><th>순위</th><th>변동</th><th>이전</th><th>시각</th></tr></thead>
             <tbody id="ranking-list"></tbody>
           </table>
         </div>
@@ -522,7 +533,10 @@ function renderBranchList() {
   const entries=Object.entries(branches);
   if (!entries.length) { container.innerHTML=''; empty.style.display='block'; return; }
   empty.style.display='none';
-  container.innerHTML=entries.map(([key,b])=>`
+  container.innerHTML=entries.map(([key,b])=>{
+    const blogs=[...(b.blogs||[])].sort((a,z)=>a.localeCompare(z,'ko'));
+    const kws=[...(b.keywords||[])].sort((a,z)=>a.localeCompare(z,'ko'));
+    return `
     <div class="branch-card">
       <div class="branch-header">
         <div class="branch-name">${b.name}</div>
@@ -531,19 +545,65 @@ function renderBranchList() {
           <button class="btn btn-danger" onclick="deleteBranch('${key}')">삭제</button>
         </div>
       </div>
-      <div class="flex gap-12 text-sm text-muted" style="margin-bottom:10px">
-        <span>블로그 <strong>${(b.blogs||[]).length}개</strong></span>
-        <span>키워드 <strong>${(b.keywords||[]).length}개</strong></span>
+
+      <!-- 블로그 섹션 -->
+      <div style="border:1px solid var(--border);border-radius:var(--radius-sm);margin-bottom:10px;overflow:hidden">
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:var(--surface2);cursor:pointer" onclick="toggleSection('blog-${key}')">
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="font-size:12px;font-weight:600;color:var(--text2)">블로그</span>
+            <span class="badge badge-new">${blogs.length}개</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <input type="text" placeholder="검색..." onclick="event.stopPropagation()" oninput="filterSection('blog-${key}',this.value)"
+              style="width:120px;padding:4px 8px;font-size:12px;height:28px">
+            <span id="toggle-blog-${key}" style="color:var(--text3);font-size:12px">▼ 펼치기</span>
+          </div>
+        </div>
+        <div id="blog-${key}" style="display:none;padding:12px 14px">
+          <div style="display:flex;flex-wrap:wrap;gap:6px" id="blog-list-${key}">
+            ${blogs.map(bl=>`<span class="blog-tag" data-val="${bl}">${bl}</span>`).join('')}
+          </div>
+        </div>
       </div>
-      <div class="flex mb-8" style="flex-wrap:wrap;gap:6px">
-        ${(b.blogs||[]).slice(0,8).map(bl=>`<span class="blog-tag">${bl}</span>`).join('')}
-        ${(b.blogs||[]).length>8?`<span class="blog-tag">+${(b.blogs||[]).length-8}개</span>`:''}
+
+      <!-- 키워드 섹션 -->
+      <div style="border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden">
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:var(--surface2);cursor:pointer" onclick="toggleSection('kw-${key}')">
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="font-size:12px;font-weight:600;color:var(--text2)">키워드</span>
+            <span class="badge badge-new">${kws.length}개</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <input type="text" placeholder="검색..." onclick="event.stopPropagation()" oninput="filterSection('kw-${key}',this.value)"
+              style="width:120px;padding:4px 8px;font-size:12px;height:28px">
+            <span id="toggle-kw-${key}" style="color:var(--text3);font-size:12px">▼ 펼치기</span>
+          </div>
+        </div>
+        <div id="kw-${key}" style="display:none;padding:12px 14px">
+          <div style="display:flex;flex-wrap:wrap;gap:6px" id="kw-list-${key}">
+            ${kws.map(kw=>`<span class="kw-tag" data-val="${kw}">${kw}</span>`).join('')}
+          </div>
+        </div>
       </div>
-      <div class="kw-tags">
-        ${(b.keywords||[]).slice(0,6).map(kw=>`<span class="kw-tag">${kw}</span>`).join('')}
-        ${(b.keywords||[]).length>6?`<span class="kw-tag">+${(b.keywords||[]).length-6}개</span>`:''}
-      </div>
-    </div>`).join('');
+    </div>`;
+  }).join('');
+}
+
+function toggleSection(id) {
+  const el=document.getElementById(id);
+  const btn=document.getElementById('toggle-'+id);
+  if (!el||!btn) return;
+  const isOpen=el.style.display!=='none';
+  el.style.display=isOpen?'none':'block';
+  btn.textContent=isOpen?'▼ 펼치기':'▲ 접기';
+}
+
+function filterSection(id, q) {
+  const listEl=document.getElementById((id.startsWith('blog-')?'blog-list-':'kw-list-')+id.replace(/^(blog|kw)-/,''));
+  if (!listEl) return;
+  listEl.querySelectorAll('span[data-val]').forEach(el=>{
+    el.style.display=el.dataset.val.includes(q)?'':'none';
+  });
 }
 
 // ===== 블로그/키워드 태그 =====
@@ -590,6 +650,29 @@ function confirmBulkKeywords() {
 }
 
 // ===== 순위 체크 =====
+let checkPaused = false;
+let checkStopped = false;
+
+function togglePause() {
+  checkPaused = !checkPaused;
+  const btn = document.getElementById('pause-btn');
+  btn.textContent = checkPaused ? '▶ 재시작' : '⏸ 일시정지';
+  btn.className = checkPaused ? 'btn btn-success btn-sm' : 'btn btn-secondary btn-sm';
+  if (checkPaused) document.getElementById('rank-progress-text').textContent += ' (일시정지)';
+}
+
+function stopCheck() {
+  if (!confirm('순위 체크를 중단합니까?')) return;
+  checkStopped = true;
+  checkPaused = false;
+}
+
+async function waitIfPaused() {
+  while (checkPaused && !checkStopped) {
+    await sleep(500);
+  }
+}
+
 async function runAllCheck() {
   if (!settings.clientId||!settings.clientSecret) { alert('API 키 설정 필요'); goPageByName('settings'); return; }
   const bEntries=Object.entries(branches);
@@ -601,36 +684,80 @@ async function runAllCheck() {
     });
   });
   if (!items.length) return alert('키워드 또는 블로그 없음');
+
+  // 초기화
+  checkPaused = false;
+  checkStopped = false;
+  document.getElementById('pause-btn').textContent = '⏸ 일시정지';
+  document.getElementById('pause-btn').className = 'btn btn-secondary btn-sm';
   document.getElementById('rank-progress').style.display='block';
+  document.getElementById('check-btn').disabled = true;
   document.getElementById('check-icon').textContent='⏳';
+
   for (let i=0;i<items.length;i++) {
+    // 일시정지 대기
+    await waitIfPaused();
+    // 중단 체크
+    if (checkStopped) {
+      document.getElementById('rank-progress-text').textContent=`중단됨 (${i}/${items.length} 완료)`;
+      break;
+    }
     const item=items[i];
     document.getElementById('rank-progress-text').textContent=`${item.branchName} — ${item.keyword} / ${item.blogId} (${i+1}/${items.length})`;
     document.getElementById('rank-progress-fill').style.width=((i/items.length)*100)+'%';
-    const rank=await checkRank(item.blogId,item.keyword);
-    const rKey=`${item.branchKey}_${item.blogId}_${item.keyword.replace(/\s+/g,'_').replace(/[^a-zA-Z0-9가-힣_]/g,'')}`.slice(0,100);
-    const prev=rankings[rKey];
-    await db.ref('rankings/'+rKey).set({branchKey:item.branchKey,branchName:item.branchName,blogId:item.blogId,keyword:item.keyword,rank,prevRank:prev?prev.rank:null,checkedAt:new Date().toISOString()});
-    await sleep(300);
+    const result=await checkRank(item.blogId,item.keyword);
+    const rKeyBase=`${item.branchKey}_${item.blogId}_${item.keyword.replace(/\s+/g,'_').replace(/[^a-zA-Z0-9가-힣_]/g,'')}`.slice(0,95);
+    const prev=rankings[rKeyBase+'_b'];
+    const prevC=rankings[rKeyBase+'_c'];
+    await db.ref('rankings/'+rKeyBase+'_b').set({branchKey:item.branchKey,branchName:item.branchName,blogId:item.blogId,keyword:item.keyword,tab:'블로그',rank:result.blog,prevRank:prev?prev.rank:null,checkedAt:new Date().toISOString()});
+    await db.ref('rankings/'+rKeyBase+'_c').set({branchKey:item.branchKey,branchName:item.branchName,blogId:item.blogId,keyword:item.keyword,tab:'카페',rank:result.cafe,prevRank:prevC?prevC.rank:null,checkedAt:new Date().toISOString()});
+    await sleep(100);
   }
-  document.getElementById('rank-progress').style.display='none';
+
+  if (!checkStopped) {
+    document.getElementById('rank-progress-text').textContent=`✅ 완료! (${items.length}개 체크)`;
+    document.getElementById('rank-progress-fill').style.width='100%';
+    setTimeout(()=>{ document.getElementById('rank-progress').style.display='none'; }, 2000);
+  }
+  document.getElementById('check-btn').disabled = false;
   document.getElementById('check-icon').textContent='🔄';
 }
 
 async function checkRank(blogId, keyword) {
   const depth=settings.rankDepth||50;
+  const headers={'X-Naver-Client-Id':settings.clientId,'X-Naver-Client-Secret':settings.clientSecret};
+  
+  // 블로그탭 체크
+  let blogRank = null;
   try {
-    const res=await fetch(`${PROXY}/v1/search/blog?query=${encodeURIComponent(keyword)}&display=${Math.min(depth,100)}&sort=sim`,
-      {headers:{'X-Naver-Client-Id':settings.clientId,'X-Naver-Client-Secret':settings.clientSecret}});
-    if (!res.ok) return null;
-    const data=await res.json();
-    const items=data.items||[];
-    for (let i=0;i<items.length;i++) {
-      const link=items[i].link||'';
-      if (link.includes('/'+blogId+'/') || link.endsWith('/'+blogId)) return i+1;
+    const res=await fetch(`${PROXY}/v1/search/blog?query=${encodeURIComponent(keyword)}&display=${Math.min(depth,100)}&sort=sim`,{headers});
+    if (res.ok) {
+      const data=await res.json();
+      const items=data.items||[];
+      for (let i=0;i<items.length;i++) {
+        const link=items[i].link||'';
+        if (link.includes('/'+blogId+'/') || link.endsWith('/'+blogId)) { blogRank=i+1; break; }
+      }
     }
-    return null;
-  } catch(e) { return null; }
+  } catch(e) {}
+
+  await sleep(200);
+
+  // 카페탭 체크
+  let cafeRank = null;
+  try {
+    const res=await fetch(`${PROXY}/v1/search/cafearticle?query=${encodeURIComponent(keyword)}&display=${Math.min(depth,100)}&sort=sim`,{headers});
+    if (res.ok) {
+      const data=await res.json();
+      const items=data.items||[];
+      for (let i=0;i<items.length;i++) {
+        const link=items[i].link||'';
+        if (link.includes(blogId)) { cafeRank=i+1; break; }
+      }
+    }
+  } catch(e) {}
+
+  return { blog: blogRank, cafe: cafeRank };
 }
 function sleep(ms) { return new Promise(r=>setTimeout(r,ms)); }
 
@@ -639,15 +766,25 @@ function renderRankingList() {
   const tbody=document.getElementById('ranking-list');
   const empty=document.getElementById('ranking-empty');
   const filter=document.getElementById('rank-branch-filter')?.value||'';
+  const limit=parseInt(document.getElementById('rank-limit-filter')?.value||'20');
   let data=Object.values(rankings);
   if (filter) data=data.filter(r=>r.branchKey===filter);
-  if (!data.length) { tbody.innerHTML=''; empty.style.display='block'; return; }
+  // 순위 필터 (0이면 전체)
+  if (limit>0) data=data.filter(r=>r.rank&&r.rank<=limit);
+  if (!data.length) {
+    tbody.innerHTML='';
+    empty.style.display='block';
+    empty.querySelector('.empty-title').textContent = limit>0 ? `${limit}위 이내 순위 없음` : '순위 데이터 없음';
+    return;
+  }
   empty.style.display='none';
   data.sort((a,b)=>(a.rank||999)-(b.rank||999));
   tbody.innerHTML=data.map(r=>`<tr>
     <td><strong>${r.branchName}</strong></td>
     <td>${r.keyword}</td>
+    <td><span class="badge ${r.tab==='블로그'?'badge-new':'badge-same'}">${r.tab||'블로그'}</span></td>
     <td class="text-accent text-sm">${r.blogId}</td>
+    <td class="text-sm"><a href="https://blog.naver.com/${r.blogId}" target="_blank" style="color:var(--text3);text-decoration:none" onmouseover="this.style.color='var(--accent)'" onmouseout="this.style.color='var(--text3)'">blog.naver.com/${r.blogId} ↗</a></td>
     <td>${rankBadge(r.rank)}</td>
     <td>${changeBadge(r.rank,r.prevRank)}</td>
     <td class="text-muted text-sm">${r.prevRank?r.prevRank+'위':'-'}</td>
@@ -704,12 +841,27 @@ async function quickCheck() {
   if (!blogId||!keyword) return alert('블로그 ID와 키워드를 입력해주세요.');
   if (!settings.clientId||!settings.clientSecret) { alert('API 키 설정 필요'); return; }
   document.getElementById('q-icon').textContent='⏳';
-  const rank=await checkRank(blogId,keyword);
+  const result=await checkRank(blogId,keyword);
   document.getElementById('q-icon').textContent='🔍';
   document.getElementById('q-result').style.display='block';
   const el=document.getElementById('q-result-rank');
-  if (!rank) { el.textContent='100위 밖'; el.style.color='var(--text3)'; el.style.fontSize='36px'; document.getElementById('q-result-msg').innerHTML='<span class="badge badge-out">⚠️ 미노출</span>'; }
-  else { el.textContent=rank+'위'; el.style.fontSize='60px'; el.style.color=rank===1?'#ffd700':rank<=3?'var(--warning)':rank<=10?'var(--success)':'var(--text)'; document.getElementById('q-result-msg').innerHTML=`<span class="badge badge-new">${rank<=3?'🏆 상위노출':rank<=10?'✅ 1페이지':rank<=20?'📊 2페이지':'📉 확인필요'}</span>`; }
+  const blogRank=result.blog, cafeRank=result.cafe;
+  const best=blogRank&&cafeRank?Math.min(blogRank,cafeRank):blogRank||cafeRank;
+  if (!best) {
+    el.textContent='미노출'; el.style.color='var(--text3)'; el.style.fontSize='28px';
+    document.getElementById('q-result-msg').innerHTML='<span class="badge badge-out">⚠️ 블로그/카페 모두 미노출</span>';
+  } else {
+    el.textContent=best+'위'; el.style.fontSize='56px';
+    el.style.color=best===1?'#ffd700':best<=3?'var(--warning)':best<=10?'var(--success)':'var(--text)';
+    const blogText=blogRank?`블로그 ${blogRank}위`:'블로그 미노출';
+    const cafeText=cafeRank?`카페 ${cafeRank}위`:'카페 미노출';
+    document.getElementById('q-result-msg').innerHTML=`
+      <div style="display:flex;gap:8px;justify-content:center;margin-bottom:8px">
+        <span class="badge badge-new">📝 ${blogText}</span>
+        <span class="badge badge-same">☕ ${cafeText}</span>
+      </div>
+      <span class="badge ${best<=3?'badge-up':best<=10?'badge-new':'badge-same'}">${best<=3?'🏆 상위노출':best<=10?'✅ 1페이지':best<=20?'📊 2페이지':'📉 확인필요'}</span>`;
+  }
   document.getElementById('q-result-keyword').textContent=`"${keyword}"`;
   document.getElementById('q-result-url').textContent=blogId;
 }
@@ -726,11 +878,11 @@ function generateReport() {
     const bRankings=Object.values(rankings).filter(r=>r.branchKey===key);
     if (!bRankings.length) { content+='  (순위 데이터 없음)\n\n'; return; }
     const byKw={};
-    bRankings.forEach(r=>{ if(!byKw[r.keyword]) byKw[r.keyword]=[]; byKw[r.keyword].push(r); });
-    Object.entries(byKw).forEach(([kw,rs])=>{
-      const best=rs.filter(r=>r.rank).sort((a,b)=>a.rank-b.rank)[0];
-      const rankText=best?`${best.rank}위 (${best.blogId})`:'미노출';
-      content+=`  • ${kw.padEnd(25)} ${rankText}\n`;
+    bRankings.forEach(r=>{ if(!byKw[r.keyword]) byKw[r.keyword]={blog:null,cafe:null}; if(r.tab==='카페') byKw[r.keyword].cafe=r; else byKw[r.keyword].blog=r; });
+    Object.entries(byKw).sort(([a],[b])=>a.localeCompare(b,'ko')).forEach(([kw,tabs])=>{
+      const blogText=tabs.blog?.rank?`블로그 ${tabs.blog.rank}위`:'블로그 미노출';
+      const cafeText=tabs.cafe?.rank?`카페 ${tabs.cafe.rank}위`:'카페 미노출';
+      content+=`  • ${kw.padEnd(22)} ${blogText} / ${cafeText}\n`;
     });
     content+='\n';
   });
