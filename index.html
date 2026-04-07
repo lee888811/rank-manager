@@ -1223,34 +1223,47 @@ function generateReport() {
   const today=new Date().toLocaleDateString('ko-KR',{year:'numeric',month:'long',day:'numeric'});
   let content=`📊 미클리닉 블로그 순위 보고서\n${today} (${type==='daily'?'일간':'주간'})\n${'='.repeat(45)}\n\n`;
   const targets=bVal?[[bVal,branches[bVal]]]:Object.entries(branches);
+
   targets.forEach(([key,b])=>{
     content+=`▶ ${b.name}\n`;
-    const bRankings=Object.values(rankings).filter(r=>r.branchKey===key);
+    const bRankings=Object.values(rankings).filter(r=>r.branchKey===key && r.rank);
     if (!bRankings.length) { content+='  (순위 데이터 없음)\n\n'; return; }
 
-    // 키워드별로 블로그/카페 묶기
+    // 키워드별로 묶기
     const byKw={};
     bRankings.forEach(r=>{
-      if (!byKw[r.keyword]) byKw[r.keyword]={blog:null,cafe:null};
-      if (r.tab==='카페') byKw[r.keyword].cafe=r;
-      else byKw[r.keyword].blog=r;
+      if (!byKw[r.keyword]) byKw[r.keyword]={blog:[], cafe:[]};
+      if (r.tab==='카페') byKw[r.keyword].cafe.push(r);
+      else byKw[r.keyword].blog.push(r);
     });
 
-    // 순위 있는 것 먼저, 없는 것 나중에 / 같으면 키워드순
-    const sorted = Object.entries(byKw).sort(([ka,a],[kb,b])=>{
-      const aRank = a.blog?.rank || a.cafe?.rank || 999;
-      const bRank = b.blog?.rank || b.cafe?.rank || 999;
-      if (aRank !== bRank) return aRank - bRank;
-      return ka.localeCompare(kb,'ko');
+    // 키워드별 최상위 순위 기준 정렬
+    const sorted = Object.entries(byKw).sort(([,a],[,b])=>{
+      const aRank = Math.min(...[...a.blog,...a.cafe].map(r=>r.rank||999));
+      const bRank = Math.min(...[...b.blog,...b.cafe].map(r=>r.rank||999));
+      return aRank - bRank;
     });
 
-    sorted.forEach(([kw,tabs])=>{
-      const blogText=tabs.blog?.rank?`블로그 ${tabs.blog.rank}위`:'-';
-      const cafeText=tabs.cafe?.rank?`카페 ${tabs.cafe.rank}위`:'-';
-      content+=`  • ${kw.padEnd(22)} ${blogText} / ${cafeText}\n`;
+    sorted.forEach(([kw, tabs])=>{
+      content += `  • ${kw}\n`;
+      // 블로그탭 - 순위순 정렬
+      const blogSorted = tabs.blog.sort((a,b)=>a.rank-b.rank);
+      if (blogSorted.length) {
+        content += `    [블로그] ${blogSorted.map(r=>`${r.rank}위`).join(' / ')}\n`;
+      } else {
+        content += `    [블로그] -\n`;
+      }
+      // 카페탭 - 순위순 정렬
+      const cafeSorted = tabs.cafe.sort((a,b)=>a.rank-b.rank);
+      if (cafeSorted.length) {
+        content += `    [카페]   ${cafeSorted.map(r=>`${r.rank}위`).join(' / ')}\n`;
+      } else {
+        content += `    [카페]   -\n`;
+      }
     });
     content+='\n';
   });
+
   document.getElementById('report-content').textContent=content;
   document.getElementById('report-area').style.display='block';
 }
