@@ -153,6 +153,7 @@ tr:hover td{background:var(--surface2);}
     <div class="nav-item" data-page="alarm" onclick="goPage(this)"><span class="nav-icon">🔔</span> 누락 알람</div>
     <div class="nav-section">자동화</div>
     <div class="nav-item" data-page="report" onclick="goPage(this)"><span class="nav-icon">📋</span> 보고서 발송</div>
+        <div class="nav-item" data-page="internal" onclick="goPage(this)"><span class="nav-icon">🔍</span> 내부 체크</div>
     <div class="nav-item" data-page="backup" onclick="goPage(this)"><span class="nav-icon">💾</span> 백업/복원</div>
     <div class="nav-section">설정</div>
     <div class="nav-item" data-page="settings" onclick="goPage(this)"><span class="nav-icon">⚙️</span> 설정</div>
@@ -303,7 +304,7 @@ tr:hover td{background:var(--surface2);}
 
     <!-- 보고서 -->
     <div id="page-report" class="page">
-      <div class="page-header"><div><div class="page-title">보고서 발송</div></div></div>
+      <div class="page-header"><div><div class="page-title">📋 보고서 발송</div><div class="page-sub">클라이언트 보고용 — 미노출 키워드 제외</div></div></div>
       <div class="card">
         <div class="form-row col2">
           <div class="form-group"><div class="form-label">지점 선택</div><select id="report-branch"><option value="">전체 지점</option></select></div>
@@ -312,7 +313,7 @@ tr:hover td{background:var(--surface2);}
               <option value="rank">순위순</option>
               <option value="alpha">가나다순</option>
             </select>
-          </div><select id="report-type"><option value="daily">일간</option><option value="weekly">주간</option></select></div>
+          </div>
         </div>
         <button class="btn btn-primary" onclick="generateReport()">📋 보고서 생성</button>
       </div>
@@ -327,6 +328,32 @@ tr:hover td{background:var(--surface2);}
             </div>
           </div>
           <div class="report-preview" id="report-content"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 내부 체크 -->
+    <div id="page-internal" class="page">
+      <div class="page-header"><div><div class="page-title">🔍 내부 체크</div><div class="page-sub">전체 키워드 열거 — 미노출 포함</div></div></div>
+      <div class="card">
+        <div class="form-row col2">
+          <div class="form-group"><div class="form-label">지점 선택</div><select id="internal-branch"><option value="">전체 지점</option></select></div>
+          <div class="form-group"><div class="form-label">정렬</div>
+            <select id="internal-sort" style="width:140px">
+              <option value="rank">순위순</option>
+              <option value="alpha">가나다순</option>
+            </select>
+          </div>
+        </div>
+        <button class="btn btn-secondary" onclick="generateInternal()">🔍 전체 목록 생성</button>
+      </div>
+      <div id="internal-area" style="display:none">
+        <div class="card">
+          <div class="flex-between mb-8">
+            <div class="card-title">전체 키워드 목록</div>
+            <button class="btn btn-secondary btn-sm" onclick="copyInternal()">📋 복사</button>
+          </div>
+          <div class="report-preview" id="internal-content"></div>
         </div>
       </div>
     </div>
@@ -1307,52 +1334,115 @@ async function quickCheck() {
 
 // ===== 보고서 =====
 function generateReport() {
-  const bVal=document.getElementById('report-branch').value;
-  const type=document.getElementById('report-type').value;
-  const today=new Date().toLocaleDateString('ko-KR',{year:'numeric',month:'long',day:'numeric'});
-  let content=`📊 미클리닉 블로그 순위 보고서\n${today} (${type==='daily'?'일간':'주간'})\n${'='.repeat(45)}\n\n`;
-  const targets=bVal?[[bVal,branches[bVal]]]:Object.entries(branches);
+  const bVal = document.getElementById('report-branch').value;
+  const sortBy = document.getElementById('report-sort')?.value || 'rank';
+  const today = new Date().toLocaleDateString('ko-KR', {year:'numeric',month:'long',day:'numeric'});
+  let content = `📊 미클리닉 블로그 순위 보고서\n${today}\n${'='.repeat(45)}\n\n`;
 
-  targets.forEach(([key,b])=>{
-    content+=`▶ ${b.name}\n`;
+  const targets = bVal ? [[bVal,branches[bVal]]] : Object.entries(branches);
+
+  targets.forEach(([key,b]) => {
     const keywords = b.keywords || [];
-    if (!keywords.length) { content+='  (키워드 없음)\n\n'; return; }
-
-    // 순위 데이터를 키워드별로 묶기
-    const byKw={};
+    const byKw = {};
     Object.values(rankings).filter(r=>r.branchKey===key).forEach(r=>{
-      if (!byKw[r.keyword]) byKw[r.keyword]={blog:[], cafe:[]};
+      if (!byKw[r.keyword]) byKw[r.keyword]={blog:[],cafe:[]};
       if (r.tab==='카페') byKw[r.keyword].cafe.push(r);
       else byKw[r.keyword].blog.push(r);
     });
 
-    // 정렬
-    const sortBy = document.getElementById('report-sort')?.value || 'rank';
-    const sorted = keywords.slice().sort((a,b)=>{
-      if (sortBy === 'alpha') return a.localeCompare(b, 'ko');
-      const aData = byKw[a] || {blog:[], cafe:[]};
-      const bData = byKw[b] || {blog:[], cafe:[]};
-      const aRanks = [...aData.blog,...aData.cafe].map(r=>r.rank).filter(r=>r);
-      const bRanks = [...bData.blog,...bData.cafe].map(r=>r.rank).filter(r=>r);
-      const aRank = aRanks.length ? Math.min(...aRanks) : 999;
-      const bRank = bRanks.length ? Math.min(...bRanks) : 999;
-      return aRank - bRank;
+    // 노출된 키워드만
+    const rankedKws = keywords.filter(kw=>{
+      const d = byKw[kw]||{blog:[],cafe:[]};
+      return [...d.blog,...d.cafe].some(r=>r.rank);
     });
 
-    sorted.forEach((kw, idx)=>{
-      const tabs = byKw[kw] || {blog:[], cafe:[]};
-      content += `  ${String(idx+1).padStart(3, ' ')}. ${kw}\n`;
-      const blogSorted = tabs.blog.filter(r=>r.rank).sort((a,b)=>a.rank-b.rank);
-      content += `    [블로그] ${blogSorted.length ? blogSorted.map(r=>`${r.rank}위`).join(' / ') : '-'}\n`;
-      const cafeSorted = tabs.cafe.filter(r=>r.rank).sort((a,b)=>a.rank-b.rank);
-      content += `    [카페]   ${cafeSorted.length ? cafeSorted.map(r=>`${r.rank}위`).join(' / ') : '-'}\n`;
+    if (!rankedKws.length) return;
+
+    // 순위별 집계
+    let r1=0,r2=0,r3=0,r4=0,r5=0,r6_15=0;
+    rankedKws.forEach(kw=>{
+      const d = byKw[kw]||{blog:[],cafe:[]};
+      const ranks = [...d.blog,...d.cafe].map(r=>r.rank).filter(r=>r);
+      const best = Math.min(...ranks);
+      if (best===1) r1++;
+      else if (best===2) r2++;
+      else if (best===3) r3++;
+      else if (best===4) r4++;
+      else if (best===5) r5++;
+      else if (best<=15) r6_15++;
     });
-    content+='\n';
+
+    content += `▶ ${b.name}\n`;
+    content += `${'─'.repeat(40)}\n`;
+    content += `📊 순위 요약\n`;
+    content += `  1위: ${r1}개  2위: ${r2}개  3위: ${r3}개\n`;
+    content += `  4위: ${r4}개  5위: ${r5}개  6~15위: ${r6_15}개\n`;
+    content += `  ✅ 총 ${rankedKws.length}개 노출 중\n`;
+    content += `${'─'.repeat(40)}\n\n`;
+
+    // 정렬
+    const sorted = rankedKws.slice().sort((a,b2)=>{
+      if (sortBy==='alpha') return a.localeCompare(b2,'ko');
+      const aRanks=[...(byKw[a]||{blog:[],cafe:[]}).blog,...(byKw[a]||{blog:[],cafe:[]}).cafe].map(r=>r.rank).filter(r=>r);
+      const bRanks=[...(byKw[b2]||{blog:[],cafe:[]}).blog,...(byKw[b2]||{blog:[],cafe:[]}).cafe].map(r=>r.rank).filter(r=>r);
+      return (aRanks.length?Math.min(...aRanks):999)-(bRanks.length?Math.min(...bRanks):999);
+    });
+
+    sorted.forEach((kw,idx)=>{
+      const tabs = byKw[kw]||{blog:[],cafe:[]};
+      const blogSorted = tabs.blog.filter(r=>r.rank).sort((a,b)=>a.rank-b.rank);
+      const cafeSorted = tabs.cafe.filter(r=>r.rank).sort((a,b)=>a.rank-b.rank);
+      content += `  ${String(idx+1).padStart(3)}. ${kw}\n`;
+      content += `       [블로그] ${blogSorted.length?blogSorted.map(r=>`${r.rank}위`).join(' / '):'-'}\n`;
+      if (cafeSorted.length) content += `       [카페]   ${cafeSorted.map(r=>`${r.rank}위`).join(' / ')}\n`;
+    });
+    content += '\n';
   });
 
-  document.getElementById('report-content').textContent=content;
-  document.getElementById('report-area').style.display='block';
+  document.getElementById('report-content').textContent = content;
+  document.getElementById('report-area').style.display = 'block';
 }
+
+function generateInternal() {
+  const bVal = document.getElementById('internal-branch').value;
+  const sortBy = document.getElementById('internal-sort')?.value || 'rank';
+  const today = new Date().toLocaleDateString('ko-KR', {year:'numeric',month:'long',day:'numeric'});
+  let content = `🔍 내부 체크 — 전체 키워드\n${today}\n${'='.repeat(45)}\n\n`;
+
+  const targets = bVal ? [[bVal,branches[bVal]]] : Object.entries(branches);
+
+  targets.forEach(([key,b]) => {
+    const keywords = b.keywords || [];
+    const byKw = {};
+    Object.values(rankings).filter(r=>r.branchKey===key).forEach(r=>{
+      if (!byKw[r.keyword]) byKw[r.keyword]={blog:[],cafe:[]};
+      if (r.tab==='카페') byKw[r.keyword].cafe.push(r);
+      else byKw[r.keyword].blog.push(r);
+    });
+
+    const sorted = keywords.slice().sort((a,b2)=>{
+      if (sortBy==='alpha') return a.localeCompare(b2,'ko');
+      const aRanks=[...(byKw[a]||{blog:[],cafe:[]}).blog,...(byKw[a]||{blog:[],cafe:[]}).cafe].map(r=>r.rank).filter(r=>r);
+      const bRanks=[...(byKw[b2]||{blog:[],cafe:[]}).blog,...(byKw[b2]||{blog:[],cafe:[]}).cafe].map(r=>r.rank).filter(r=>r);
+      return (aRanks.length?Math.min(...aRanks):999)-(bRanks.length?Math.min(...bRanks):999);
+    });
+
+    content += `▶ ${b.name} (전체 ${keywords.length}개)\n`;
+    sorted.forEach((kw,idx)=>{
+      const tabs = byKw[kw]||{blog:[],cafe:[]};
+      const blogSorted = tabs.blog.filter(r=>r.rank).sort((a,b)=>a.rank-b.rank);
+      const cafeSorted = tabs.cafe.filter(r=>r.rank).sort((a,b)=>a.rank-b.rank);
+      content += `  ${String(idx+1).padStart(3)}. ${kw}\n`;
+      content += `       [블로그] ${blogSorted.length?blogSorted.map(r=>`${r.rank}위`).join(' / '):'-'}\n`;
+      content += `       [카페]   ${cafeSorted.length?cafeSorted.map(r=>`${r.rank}위`).join(' / '):'-'}\n`;
+    });
+    content += '\n';
+  });
+
+  document.getElementById('internal-content').textContent = content;
+  document.getElementById('internal-area').style.display = 'block';
+}
+function copyInternal() { navigator.clipboard.writeText(document.getElementById('internal-content').textContent).then(()=>alert('복사됐습니다!')); }
 function copyReport() { navigator.clipboard.writeText(document.getElementById('report-content').textContent).then(()=>alert('복사됐습니다!')); }
 function sendKakao() { navigator.clipboard.writeText(document.getElementById('report-content').textContent); window.open('https://open.kakao.com/','_blank'); alert('카카오톡에 붙여넣기 해주세요.'); }
 function sendEmail() { window.open(`mailto:?subject=${encodeURIComponent('미클리닉 순위 보고서')}&body=${encodeURIComponent(document.getElementById('report-content').textContent)}`); }
@@ -1383,7 +1473,7 @@ function clearAll() { if(!confirm('모든 데이터 삭제? 복구 불가')) ret
 // ===== 셀렉트 =====
 function updateSelects() {
   const opts=Object.entries(branches).map(([k,b])=>`<option value="${k}">${b.name}</option>`).join('');
-  ['report-branch','rank-branch-filter','dash-branch-filter','alarm-branch-filter','missing-branch-filter'].forEach(id=>{ const el=document.getElementById(id); if(el) el.innerHTML='<option value="">전체 지점</option>'+opts; });
+  ['report-branch','rank-branch-filter','dash-branch-filter','alarm-branch-filter','missing-branch-filter','internal-branch'].forEach(id=>{ const el=document.getElementById(id); if(el) el.innerHTML='<option value="">전체 지점</option>'+opts; });
 }
 
 // ===== 백업 =====
