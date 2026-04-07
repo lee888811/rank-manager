@@ -255,15 +255,46 @@ tr:hover td{background:var(--surface2);}
 
     <!-- 누락 감지 -->
     <div id="page-missing" class="page">
-      <div class="page-header"><div><div class="page-title">🚨 순위 이탈 감지</div></div></div>
-      <div class="stat-grid" style="grid-template-columns:repeat(3,1fr)">
-        <div class="stat-card"><div class="stat-label">100위 이탈</div><div class="stat-value text-danger" id="missing-out">0</div></div>
-        <div class="stat-card"><div class="stat-label">10위 이상 하락</div><div class="stat-value text-warning" id="missing-drop">0</div></div>
-        <div class="stat-card"><div class="stat-label">신규 진입</div><div class="stat-value text-success" id="missing-new">0</div></div>
+      <div class="page-header">
+        <div><div class="page-title">🚨 순위 이탈 감지</div></div>
+        <div class="flex gap-8">
+          <select id="missing-branch-filter" style="width:160px" onchange="renderMissingList()"><option value="">전체 지점</option></select>
+          <select id="missing-tab-filter" style="width:120px" onchange="renderMissingList()">
+            <option value="">블로그+카페</option>
+            <option value="블로그">블로그만</option>
+            <option value="카페">카페만</option>
+          </select>
+        </div>
       </div>
+      <div class="stat-grid" style="grid-template-columns:repeat(4,1fr)">
+        <div class="stat-card"><div class="stat-label">🔴 100위 이탈</div><div class="stat-value text-danger" id="missing-out">0</div><div class="stat-change">포스팅 필요</div></div>
+        <div class="stat-card"><div class="stat-label">🟡 10위 이상 하락</div><div class="stat-value text-warning" id="missing-drop">0</div><div class="stat-change">보강 필요</div></div>
+        <div class="stat-card"><div class="stat-label">🟢 신규 진입</div><div class="stat-value text-success" id="missing-new">0</div></div>
+        <div class="stat-card"><div class="stat-label">✅ 정상 노출</div><div class="stat-value text-success" id="missing-ok">0</div></div>
+      </div>
+
+      <!-- 키워드별 현황 테이블 -->
       <div class="card">
-        <div class="card-title">이탈 목록</div>
-        <div id="missing-list"><div class="empty-state"><div class="empty-icon">✅</div><div class="empty-title">이탈 없음</div></div></div>
+        <div class="flex-between mb-16">
+          <div class="card-title">키워드별 순위 현황</div>
+          <div class="flex gap-8">
+            <select id="missing-sort" style="width:140px" onchange="renderMissingList()">
+              <option value="rank">순위순</option>
+              <option value="kw">키워드순</option>
+              <option value="bad">이탈 먼저</option>
+            </select>
+            <button class="btn btn-secondary btn-sm" onclick="copyMissingList()">📋 복사</button>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>지점</th><th>키워드</th><th>블로그 순위</th><th>카페 순위</th><th>상태</th><th>포스팅</th></tr></thead>
+            <tbody id="missing-list"></tbody>
+          </table>
+        </div>
+        <div id="missing-empty" class="empty-state" style="display:none">
+          <div class="empty-icon">✅</div><div class="empty-title">이탈 없음</div>
+        </div>
       </div>
     </div>
 
@@ -1024,12 +1055,122 @@ function getMissingList() {
   },[]);
 }
 function renderMissingList() {
-  const list=getMissingList();
-  const html=!list.length
+  const tbody = document.getElementById('missing-list');
+  const empty = document.getElementById('missing-empty');
+  const branchFilter = document.getElementById('missing-branch-filter')?.value || '';
+  const tabFilter = document.getElementById('missing-tab-filter')?.value || '';
+  const sortBy = document.getElementById('missing-sort')?.value || 'bad';
+
+  // 키워드별로 블로그/카페 묶기
+  const kwMap = {};
+  Object.values(rankings).forEach(r => {
+    if (branchFilter && r.branchKey !== branchFilter) return;
+    if (tabFilter && r.tab !== tabFilter) return;
+    const key = `${r.branchKey}_${r.keyword}`;
+    if (!kwMap[key]) kwMap[key] = { branchName: r.branchName, branchKey: r.branchKey, keyword: r.keyword, blog: null, cafe: null };
+    if (r.tab === '블로그') kwMap[key].blog = r;
+    else if (r.tab === '카페') kwMap[key].cafe = r;
+  });
+
+  let list = Object.values(kwMap);
+  if (!list.length) { tbody.innerHTML = ''; empty.style.display = 'block'; return; }
+  empty.style.display = 'none';
+
+  // 상태 계산
+  list = list.map(item => {
+    const blogRank = item.blog?.rank || null;
+    const cafeRank = item.cafe?.rank || null;
+    const bestRank = blogRank && cafeRank ? Math.min(blogRank, cafeRank) : blogRank || cafeRank;
+    let status = 'ok';
+    if (!bestRank) status = 'out';
+    else if (item.blog?.prevRank && blogRank && (item.blog.prevRank - blogRank) < -10) status = 'drop';
+    else if (!item.blog?.prevRank && blogRank && blogRank <= 10) status = 'new';
+    return { ...item, bestRank, status };
+  });
+
+  // 정렬
+  if (sortBy === 'rank') list.sort((a,b) => (a.bestRank||999) - (b.bestRank||999));
+  else if (sortBy === 'kw') list.sort((a,b) => a.keyword.localeCompare(b.keyword, 'ko'));
+  else if (sortBy === 'bad') list.sort((a,b) => {
+    const order = { out:0, drop:1, new:2, ok:3 };
+    return (order[a.status]||3) - (order[b.status]||3);
+  });
+
+  // 통계 업데이트
+  const outCnt = list.filter(i => i.status === 'out').length;
+  const dropCnt = list.filter(i => i.status === 'drop').length;
+  const newCnt = list.filter(i => i.status === 'new').length;
+  const okCnt = list.filter(i => i.status === 'ok').length;
+  document.getElementById('missing-out').textContent = outCnt;
+  document.getElementById('missing-drop').textContent = dropCnt;
+  document.getElementById('missing-new').textContent = newCnt;
+  document.getElementById('missing-ok').textContent = okCnt;
+
+  tbody.innerHTML = list.map(item => {
+    const blogRank = item.blog?.rank;
+    const cafeRank = item.cafe?.rank;
+    const blogText = blogRank ? `<span class="rank-num ${blogRank<=3?'top3':blogRank<=10?'top10':''}">${blogRank}위</span>` : '<span style="color:var(--text3)">-</span>';
+    const cafeText = cafeRank ? `<span class="rank-num ${cafeRank<=3?'top3':cafeRank<=10?'top10':''}">${cafeRank}위</span>` : '<span style="color:var(--text3)">-</span>';
+    const statusBadge = item.status === 'out' ? '<span class="badge badge-down">🔴 이탈</span>'
+      : item.status === 'drop' ? '<span class="badge badge-out">🟡 하락</span>'
+      : item.status === 'new' ? '<span class="badge badge-new">🟢 신규</span>'
+      : '<span class="badge badge-same">✅ 정상</span>';
+    const postUrl = item.blog?.postUrl || item.cafe?.postUrl;
+    const urlBtn = postUrl ? `<a href="${postUrl}" target="_blank" style="color:var(--accent);font-size:12px">보기 ↗</a>` : '-';
+    return `<tr>
+      <td><strong>${item.branchName}</strong></td>
+      <td>${item.keyword}</td>
+      <td>${blogText}</td>
+      <td>${cafeText}</td>
+      <td>${statusBadge}</td>
+      <td>${urlBtn}</td>
+    </tr>`;
+  }).join('');
+
+  // 대시보드 이탈만 표시
+  const missingItems = list.filter(i => i.status === 'out' || i.status === 'drop');
+  document.getElementById('dashboard-missing-list').innerHTML = !missingItems.length
     ? `<div class="empty-state"><div class="empty-icon">✅</div><div class="empty-title">이탈 없음</div></div>`
-    : list.map(m=>`<div class="missing-card"><div><div class="missing-title">${m.branchName} — ${m.keyword} (${m.blogId})</div><div class="missing-sub">${m.reason}</div></div><span class="badge ${m.type==='new'?'badge-new':m.type==='drop'?'badge-down':'badge-out'}">${m.type==='new'?'신규':m.type==='drop'?'하락':'이탈'}</span></div>`).join('');
-  document.getElementById('missing-list').innerHTML=html;
-  document.getElementById('dashboard-missing-list').innerHTML=html;
+    : `<div class="table-wrap"><table><thead><tr><th>지점</th><th>키워드</th><th>블로그</th><th>카페</th><th>상태</th></tr></thead><tbody>`
+      + missingItems.slice(0,10).map(i => `<tr>
+        <td><strong>${i.branchName}</strong></td>
+        <td>${i.keyword}</td>
+        <td>${i.blog?.rank ? i.blog.rank+'위' : '-'}</td>
+        <td>${i.cafe?.rank ? i.cafe.rank+'위' : '-'}</td>
+        <td>${i.status==='out'?'<span class="badge badge-down">이탈</span>':'<span class="badge badge-out">하락</span>'}</td>
+      </tr>`).join('') + '</tbody></table></div>';
+}
+
+function copyMissingList() {
+  const rows = Object.values(rankings);
+  const kwMap = {};
+  rows.forEach(r => {
+    const key = `${r.branchKey}_${r.keyword}`;
+    if (!kwMap[key]) kwMap[key] = { branchName: r.branchName, keyword: r.keyword, blog: null, cafe: null };
+    if (r.tab === '블로그') kwMap[key].blog = r;
+    else kwMap[key].cafe = r;
+  });
+  const today = new Date().toLocaleDateString('ko-KR');
+  let text = `🚨 ${today} 순위 현황\n${'='.repeat(40)}\n\n`;
+  const byBranch = {};
+  Object.values(kwMap).forEach(item => {
+    if (!byBranch[item.branchName]) byBranch[item.branchName] = [];
+    byBranch[item.branchName].push(item);
+  });
+  Object.entries(byBranch).forEach(([branch, items]) => {
+    text += `▶ ${branch}\n`;
+    items.sort((a,b) => {
+      const ar = a.blog?.rank || a.cafe?.rank || 999;
+      const br2 = b.blog?.rank || b.cafe?.rank || 999;
+      return ar - br2;
+    }).forEach(item => {
+      const blogText = item.blog?.rank ? `블로그 ${item.blog.rank}위` : '-';
+      const cafeText = item.cafe?.rank ? `카페 ${item.cafe.rank}위` : '-';
+      text += `  • ${item.keyword.padEnd(25)} ${blogText} / ${cafeText}\n`;
+    });
+    text += '\n';
+  });
+  navigator.clipboard.writeText(text).then(() => alert('복사됐습니다!'));
 }
 function renderDashboard() {
   const filter=document.getElementById('dash-branch-filter')?.value||'';
@@ -1086,9 +1227,24 @@ function generateReport() {
     content+=`▶ ${b.name}\n`;
     const bRankings=Object.values(rankings).filter(r=>r.branchKey===key);
     if (!bRankings.length) { content+='  (순위 데이터 없음)\n\n'; return; }
+
+    // 키워드별로 블로그/카페 묶기
     const byKw={};
-    bRankings.forEach(r=>{ if(!byKw[r.keyword]) byKw[r.keyword]={blog:null,cafe:null}; if(r.tab==='카페') byKw[r.keyword].cafe=r; else byKw[r.keyword].blog=r; });
-    Object.entries(byKw).sort(([a],[b])=>a.localeCompare(b,'ko')).forEach(([kw,tabs])=>{
+    bRankings.forEach(r=>{
+      if (!byKw[r.keyword]) byKw[r.keyword]={blog:null,cafe:null};
+      if (r.tab==='카페') byKw[r.keyword].cafe=r;
+      else byKw[r.keyword].blog=r;
+    });
+
+    // 순위 있는 것 먼저, 없는 것 나중에 / 같으면 키워드순
+    const sorted = Object.entries(byKw).sort(([ka,a],[kb,b])=>{
+      const aRank = a.blog?.rank || a.cafe?.rank || 999;
+      const bRank = b.blog?.rank || b.cafe?.rank || 999;
+      if (aRank !== bRank) return aRank - bRank;
+      return ka.localeCompare(kb,'ko');
+    });
+
+    sorted.forEach(([kw,tabs])=>{
       const blogText=tabs.blog?.rank?`블로그 ${tabs.blog.rank}위`:'-';
       const cafeText=tabs.cafe?.rank?`카페 ${tabs.cafe.rank}위`:'-';
       content+=`  • ${kw.padEnd(22)} ${blogText} / ${cafeText}\n`;
@@ -1128,7 +1284,7 @@ function clearAll() { if(!confirm('모든 데이터 삭제? 복구 불가')) ret
 // ===== 셀렉트 =====
 function updateSelects() {
   const opts=Object.entries(branches).map(([k,b])=>`<option value="${k}">${b.name}</option>`).join('');
-  ['report-branch','rank-branch-filter','dash-branch-filter','alarm-branch-filter'].forEach(id=>{ const el=document.getElementById(id); if(el) el.innerHTML='<option value="">전체 지점</option>'+opts; });
+  ['report-branch','rank-branch-filter','dash-branch-filter','alarm-branch-filter','missing-branch-filter'].forEach(id=>{ const el=document.getElementById(id); if(el) el.innerHTML='<option value="">전체 지점</option>'+opts; });
 }
 
 // ===== 백업 =====
