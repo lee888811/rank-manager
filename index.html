@@ -1325,8 +1325,10 @@ function generateReport() {
     const sorted = keywords.slice().sort((a,b)=>{
       const aData = byKw[a] || {blog:[], cafe:[]};
       const bData = byKw[b] || {blog:[], cafe:[]};
-      const aRank = Math.min(...[...aData.blog,...aData.cafe].map(r=>r.rank||999), 999);
-      const bRank = Math.min(...[...bData.blog,...bData.cafe].map(r=>r.rank||999), 999);
+      const aRanks = [...aData.blog,...aData.cafe].map(r=>r.rank).filter(r=>r);
+      const bRanks = [...bData.blog,...bData.cafe].map(r=>r.rank).filter(r=>r);
+      const aRank = aRanks.length ? Math.min(...aRanks) : 999;
+      const bRank = bRanks.length ? Math.min(...bRanks) : 999;
       return aRank - bRank;
     });
 
