@@ -818,49 +818,108 @@ async function runAllCheck() {
   if (!settings.clientId||!settings.clientSecret) { alert('API 키 설정 필요'); goPageByName('settings'); return; }
   const bEntries=Object.entries(branches);
   if (!bEntries.length) return alert('등록된 지점 없음');
-  const items=[];
+
+  // 키워드 기준으로 묶기 (지점별 키워드 목록)
+  const kwItems=[];
   bEntries.forEach(([bKey,b])=>{
     (b.keywords||[]).forEach(kw=>{
-      (b.blogs||[]).forEach(blogId=>{ items.push({branchKey:bKey,branchName:b.name,blogId,keyword:kw}); });
+      kwItems.push({branchKey:bKey, branchName:b.name, keyword:kw, blogs:b.blogs||[]});
     });
   });
-  if (!items.length) return alert('키워드 또는 블로그 없음');
+  if (!kwItems.length) return alert('키워드 없음');
 
-  // 초기화
-  checkPaused = false;
-  checkStopped = false;
-  document.getElementById('pause-btn').textContent = '⏸ 일시정지';
-  document.getElementById('pause-btn').className = 'btn btn-secondary btn-sm';
+  checkPaused=false; checkStopped=false;
+  document.getElementById('pause-btn').textContent='⏸ 일시정지';
+  document.getElementById('pause-btn').className='btn btn-secondary btn-sm';
   document.getElementById('rank-progress').style.display='block';
-  document.getElementById('check-btn').disabled = true;
+  document.getElementById('check-btn').disabled=true;
   document.getElementById('check-icon').textContent='⏳';
 
-  for (let i=0;i<items.length;i++) {
-    // 일시정지 대기
+  const depth = Math.min(settings.rankDepth||15, 15); // 최대 15위까지만
+
+  for (let i=0;i<kwItems.length;i++) {
     await waitIfPaused();
-    // 중단 체크
-    if (checkStopped) {
-      document.getElementById('rank-progress-text').textContent=`중단됨 (${i}/${items.length} 완료)`;
-      break;
-    }
-    const item=items[i];
-    document.getElementById('rank-progress-text').textContent=`${item.branchName} — ${item.keyword} / ${item.blogId} (${i+1}/${items.length})`;
-    document.getElementById('rank-progress-fill').style.width=((i/items.length)*100)+'%';
-    const result=await checkRank(item.blogId,item.keyword);
-    const rKeyBase=`${item.branchKey}_${item.blogId}_${item.keyword.replace(/\s+/g,'_').replace(/[^a-zA-Z0-9가-힣_]/g,'')}`.slice(0,95);
-    const prev=rankings[rKeyBase+'_b'];
-    const prevC=rankings[rKeyBase+'_c'];
-    await db.ref('rankings/'+rKeyBase+'_b').set({branchKey:item.branchKey,branchName:item.branchName,blogId:item.blogId,keyword:item.keyword,tab:'블로그',rank:result.blog,postUrl:result.blogUrl||null,prevRank:prev?prev.rank:null,checkedAt:new Date().toISOString()});
-    await db.ref('rankings/'+rKeyBase+'_c').set({branchKey:item.branchKey,branchName:item.branchName,blogId:item.blogId,keyword:item.keyword,tab:'카페',rank:result.cafe,postUrl:result.cafeUrl||null,prevRank:prevC?prevC.rank:null,checkedAt:new Date().toISOString()});
-    await sleep(100);
+    if (checkStopped) { document.getElementById('rank-progress-text').textContent=`중단됨 (${i}/${kwItems.length} 완료)`; break; }
+
+    const item=kwItems[i];
+    document.getElementById('rank-progress-text').textContent=`${item.branchName} — ${item.keyword} (${i+1}/${kwItems.length})`;
+    document.getElementById('rank-progress-fill').style.width=((i/kwItems.length)*100)+'%';
+
+    const headers={'X-Naver-Client-Id':settings.clientId,'X-Naver-Client-Secret':settings.clientSecret};
+
+    // 블로그탭: 키워드 검색 → 15위 안에 우리 블로그 찾기
+    try {
+      const res=await fetch(`${PROXY}/v1/search/blog?query=${encodeURIComponent(item.keyword)}&display=${depth}&sort=sim`,{headers});
+      if (res.ok) {
+        const data=await res.json();
+        const results=data.items||[];
+        // 결과에서 우리 블로그 찾기
+        const found={};
+        results.forEach((r,idx)=>{
+          const link=r.link||'';
+          item.blogs.forEach(blogId=>{
+            if (!found[blogId] && (link.includes('/'+blogId+'/') || link.endsWith('/'+blogId))) {
+              found[blogId]={rank:idx+1, url:link};
+            }
+          });
+        });
+        // 순위 있는 블로그만 저장, 없는 건 미노출로 저장
+        const savePromises=item.blogs.map(blogId=>{
+          const rKey=`${item.branchKey}_${blogId}_${item.keyword.replace(/\s+/g,'_').replace(/[^a-zA-Z0-9가-힣_]/g,'')}`.slice(0,95)+'_b';
+          const prev=rankings[rKey];
+          const result=found[blogId]||{rank:null,url:null};
+          return db.ref('rankings/'+rKey).set({
+            branchKey:item.branchKey, branchName:item.branchName,
+            blogId, keyword:item.keyword, tab:'블로그',
+            rank:result.rank, postUrl:result.url||null,
+            prevRank:prev?prev.rank:null, checkedAt:new Date().toISOString()
+          });
+        });
+        await Promise.all(savePromises);
+      }
+    } catch(e){}
+
+    await sleep(200);
+
+    // 카페탭
+    try {
+      const res=await fetch(`${PROXY}/v1/search/cafearticle?query=${encodeURIComponent(item.keyword)}&display=${depth}&sort=sim`,{headers});
+      if (res.ok) {
+        const data=await res.json();
+        const results=data.items||[];
+        const found={};
+        results.forEach((r,idx)=>{
+          const link=r.link||'';
+          item.blogs.forEach(blogId=>{
+            if (!found[blogId] && link.includes(blogId)) {
+              found[blogId]={rank:idx+1, url:link};
+            }
+          });
+        });
+        const savePromises=item.blogs.map(blogId=>{
+          const rKey=`${item.branchKey}_${blogId}_${item.keyword.replace(/\s+/g,'_').replace(/[^a-zA-Z0-9가-힣_]/g,'')}`.slice(0,95)+'_c';
+          const prev=rankings[rKey];
+          const result=found[blogId]||{rank:null,url:null};
+          return db.ref('rankings/'+rKey).set({
+            branchKey:item.branchKey, branchName:item.branchName,
+            blogId, keyword:item.keyword, tab:'카페',
+            rank:result.rank, postUrl:result.url||null,
+            prevRank:prev?prev.rank:null, checkedAt:new Date().toISOString()
+          });
+        });
+        await Promise.all(savePromises);
+      }
+    } catch(e){}
+
+    await sleep(200);
   }
 
   if (!checkStopped) {
-    document.getElementById('rank-progress-text').textContent=`✅ 완료! (${items.length}개 체크)`;
+    document.getElementById('rank-progress-text').textContent=`✅ 완료! (키워드 ${kwItems.length}개 체크)`;
     document.getElementById('rank-progress-fill').style.width='100%';
     setTimeout(()=>{ document.getElementById('rank-progress').style.display='none'; }, 2000);
   }
-  document.getElementById('check-btn').disabled = false;
+  document.getElementById('check-btn').disabled=false;
   document.getElementById('check-icon').textContent='🔄';
 }
 
@@ -1024,8 +1083,8 @@ function generateReport() {
     const byKw={};
     bRankings.forEach(r=>{ if(!byKw[r.keyword]) byKw[r.keyword]={blog:null,cafe:null}; if(r.tab==='카페') byKw[r.keyword].cafe=r; else byKw[r.keyword].blog=r; });
     Object.entries(byKw).sort(([a],[b])=>a.localeCompare(b,'ko')).forEach(([kw,tabs])=>{
-      const blogText=tabs.blog?.rank?`블로그 ${tabs.blog.rank}위`:'블로그 미노출';
-      const cafeText=tabs.cafe?.rank?`카페 ${tabs.cafe.rank}위`:'카페 미노출';
+      const blogText=tabs.blog?.rank?`블로그 ${tabs.blog.rank}위`:'-';
+      const cafeText=tabs.cafe?.rank?`카페 ${tabs.cafe.rank}위`:'-';
       content+=`  • ${kw.padEnd(22)} ${blogText} / ${cafeText}\n`;
     });
     content+='\n';
