@@ -995,7 +995,7 @@ async function autoExtract() {
   st.innerHTML = '<div class="alert alert-info"><span class="spinner"></span> 분석 중...</div>';
   const blogId = url.replace(/https?:\/\//,'').replace('blog.naver.com/','').split('/')[0];
   try {
-    const res = await fetch(`https://openapi.naver.com/v1/search/blog?query=${encodeURIComponent(blogId)}&display=20&sort=date`,{
+    const res = await fetch(`https://icy-shadow-25b7.ttlholdings.workers.dev/v1/search/blog?query=${encodeURIComponent(blogId)}&display=20&sort=date`,{
       headers:{'X-Naver-Client-Id':settings.clientId,'X-Naver-Client-Secret':settings.clientSecret}
     });
     if (!res.ok) throw new Error('API 오류');
@@ -1068,7 +1068,7 @@ async function checkRank(blogUrl, keyword) {
   const blogId = blogUrl.replace(/https?:\/\//,'').replace('blog.naver.com/','').split('/')[0];
   try {
     const res = await fetch(
-      `https://openapi.naver.com/v1/search/blog?query=${encodeURIComponent(keyword)}&display=${Math.min(depth,100)}&sort=sim`,
+      `https://icy-shadow-25b7.ttlholdings.workers.dev/v1/search/blog?query=${encodeURIComponent(keyword)}&display=${Math.min(depth,100)}&sort=sim`,
       { headers:{'X-Naver-Client-Id':settings.clientId,'X-Naver-Client-Secret':settings.clientSecret} }
     );
     if (!res.ok) return null;
@@ -1406,7 +1406,7 @@ async function testApi() {
   result.style.display = 'block';
   result.innerHTML = '<div class="alert alert-info"><span class="spinner"></span> 테스트 중...</div>';
   try {
-    const res = await fetch('https://openapi.naver.com/v1/search/blog?query=테스트&display=1',
+    const res = await fetch('https://icy-shadow-25b7.ttlholdings.workers.dev/v1/search/blog?query=테스트&display=1',
       {headers:{'X-Naver-Client-Id':id,'X-Naver-Client-Secret':secret}});
     result.innerHTML = res.ok
       ? '<div class="alert alert-success">✅ API 연결 성공!</div>'
