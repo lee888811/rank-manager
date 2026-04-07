@@ -667,7 +667,7 @@ function updateStats() {
   const totalKw=bList.reduce((s,b)=>s+(b.keywords||[]).length,0);
   const missing=getMissingList();
   document.getElementById('stat-branches').textContent=bList.length;
-  document.getElementById('stat-blogs').textContent=allBlogs.size;
+  const statBlogs = document.getElementById('stat-blogs'); if(statBlogs) statBlogs.textContent=allBlogs.size;
   document.getElementById('stat-keywords').textContent=totalKw;
   document.getElementById('stat-missing').textContent=missing.length;
   document.getElementById('missing-out').textContent=missing.filter(m=>m.type==='out').length;
