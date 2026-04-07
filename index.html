@@ -167,25 +167,28 @@ tr:hover td{background:var(--surface2);}
         <div><div class="page-title">대시보드</div><div class="page-sub" id="today-date"></div></div>
         <div class="flex gap-8">
           <select id="dash-branch-filter" style="width:140px" onchange="renderDashboard()"><option value="">전체 지점</option></select>
-          <button class="btn btn-secondary" onclick="alert('순위 체크는 매일 새벽 2시 자동으로 실행됩니다.\n수동 체크가 필요하면 Google Apps Script에서 testNow 함수를 실행하세요.')">ℹ️ 자동 체크 안내</button>
+          <button class="btn btn-secondary" onclick="alert('순위 체크는 매일 새벽 자동 실행됩니다.\n수동 체크: Google Apps Script → testNow')">ℹ️ 자동 체크</button>
         </div>
       </div>
       <div id="api-warning" class="alert alert-warning" style="display:none">
         ⚠️ API 키 미설정 <span class="text-accent" style="cursor:pointer" onclick="goPageByName('settings')">설정하기 →</span>
       </div>
+
+      <!-- 전체 통계 -->
       <div class="stat-grid">
         <div class="stat-card"><div class="stat-label">관리 지점</div><div class="stat-value text-accent" id="stat-branches">0</div></div>
-        <div class="stat-card"><div class="stat-label">총 블로그</div><div class="stat-value" id="stat-blogs">0</div></div>
         <div class="stat-card"><div class="stat-label">총 키워드</div><div class="stat-value" id="stat-keywords">0</div></div>
-        <div class="stat-card"><div class="stat-label">이탈 키워드</div><div class="stat-value text-danger" id="stat-missing">0</div></div>
+        <div class="stat-card"><div class="stat-label">15위 이내 노출</div><div class="stat-value text-success" id="stat-ranked">0</div></div>
+        <div class="stat-card"><div class="stat-label">🔴 이탈 키워드</div><div class="stat-value text-danger" id="stat-missing">0</div></div>
       </div>
+
+      <!-- 지점별 현황 카드 -->
+      <div id="branch-dashboard" style="display:grid;grid-template-columns:repeat(2,1fr);gap:16px;margin-bottom:20px"></div>
+
+      <!-- 이탈 알림 -->
       <div class="card">
         <div class="card-title">🚨 순위 이탈 알림</div>
         <div id="dashboard-missing-list"><div class="empty-state"><div class="empty-icon">✅</div><div class="empty-title">이탈 없음</div></div></div>
-      </div>
-      <div class="card">
-        <div class="card-title">📊 최근 순위</div>
-        <div id="dashboard-rank-list"><div class="empty-state"><div class="empty-icon">📭</div><div class="empty-title">순위 체크 버튼을 눌러주세요</div></div></div>
       </div>
     </div>
 
@@ -1173,15 +1176,96 @@ function copyMissingList() {
   navigator.clipboard.writeText(text).then(() => alert('복사됐습니다!'));
 }
 function renderDashboard() {
-  const filter=document.getElementById('dash-branch-filter')?.value||'';
-  let data=Object.values(rankings);
-  if (filter) data=data.filter(r=>r.branchKey===filter);
-  const recent=data.sort((a,b)=>new Date(b.checkedAt||0)-new Date(a.checkedAt||0)).slice(0,15);
-  if (!recent.length) return;
-  document.getElementById('dashboard-rank-list').innerHTML=
-    `<div class="table-wrap"><table><thead><tr><th>지점</th><th>키워드</th><th>블로그</th><th>순위</th><th>변동</th></tr></thead><tbody>`+
-    recent.map(r=>`<tr><td><strong>${r.branchName}</strong></td><td>${r.keyword}</td><td class="text-accent text-sm">${r.blogId}</td><td>${rankBadge(r.rank)}</td><td>${changeBadge(r.rank,r.prevRank)}</td></tr>`).join('')+
-    '</tbody></table></div>';
+  const filter = document.getElementById('dash-branch-filter')?.value || '';
+  const container = document.getElementById('branch-dashboard');
+  if (!container) return;
+
+  const targetBranches = filter
+    ? Object.entries(branches).filter(([k]) => k === filter)
+    : Object.entries(branches);
+
+  // 전체 통계
+  let totalRanked = 0, totalMissing = 0;
+  const kwMap = {};
+  Object.values(rankings).forEach(r => {
+    const key = `${r.branchKey}_${r.keyword}`;
+    if (!kwMap[key]) kwMap[key] = { branchKey: r.branchKey, blog: null, cafe: null };
+    if (r.tab === '카페') { if (!kwMap[key].cafe || r.rank < (kwMap[key].cafe || 999)) kwMap[key].cafe = r.rank; }
+    else { if (!kwMap[key].blog || r.rank < (kwMap[key].blog || 999)) kwMap[key].blog = r.rank; }
+  });
+  Object.values(kwMap).forEach(item => {
+    const best = Math.min(item.blog || 999, item.cafe || 999);
+    if (best <= 15) totalRanked++;
+    else totalMissing++;
+  });
+  const el_ranked = document.getElementById('stat-ranked');
+  const el_missing = document.getElementById('stat-missing');
+  if (el_ranked) el_ranked.textContent = totalRanked;
+  if (el_missing) el_missing.textContent = totalMissing;
+
+  // 지점별 카드
+  container.innerHTML = targetBranches.map(([bKey, b]) => {
+    const keywords = b.keywords || [];
+    const bRankings = Object.values(rankings).filter(r => r.branchKey === bKey);
+
+    // 키워드별 최상위 순위
+    const kwBest = {};
+    bRankings.forEach(r => {
+      if (!kwBest[r.keyword] || (r.rank && r.rank < kwBest[r.keyword])) kwBest[r.keyword] = r.rank;
+    });
+
+    const top1 = keywords.filter(kw => kwBest[kw] === 1).length;
+    const top3 = keywords.filter(kw => kwBest[kw] && kwBest[kw] <= 3).length;
+    const top10 = keywords.filter(kw => kwBest[kw] && kwBest[kw] <= 10).length;
+    const top15 = keywords.filter(kw => kwBest[kw] && kwBest[kw] <= 15).length;
+    const unranked = keywords.filter(kw => !kwBest[kw]).length;
+    const checkedKw = keywords.filter(kw => kwBest[kw] !== undefined).length;
+
+    // 마지막 체크 시간
+    const lastCheck = bRankings.length
+      ? new Date(Math.max(...bRankings.map(r => new Date(r.checkedAt||0)))).toLocaleString('ko-KR',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})
+      : '미체크';
+
+    return `<div class="card" style="margin-bottom:0">
+      <div class="flex-between mb-16">
+        <div style="font-size:16px;font-weight:700">${b.name}</div>
+        <div class="text-sm text-muted">마지막 체크: ${lastCheck}</div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:16px">
+        <div style="text-align:center;padding:10px;background:var(--surface2);border-radius:8px">
+          <div style="font-size:20px;font-weight:700;color:#ffd700">${top1}</div>
+          <div style="font-size:11px;color:var(--text2)">1위</div>
+        </div>
+        <div style="text-align:center;padding:10px;background:var(--surface2);border-radius:8px">
+          <div style="font-size:20px;font-weight:700;color:var(--warning)">${top3}</div>
+          <div style="font-size:11px;color:var(--text2)">3위 이내</div>
+        </div>
+        <div style="text-align:center;padding:10px;background:var(--surface2);border-radius:8px">
+          <div style="font-size:20px;font-weight:700;color:var(--success)">${top10}</div>
+          <div style="font-size:11px;color:var(--text2)">10위 이내</div>
+        </div>
+        <div style="text-align:center;padding:10px;background:var(--surface2);border-radius:8px">
+          <div style="font-size:20px;font-weight:700;color:var(--accent)">${top15}</div>
+          <div style="font-size:11px;color:var(--text2)">15위 이내</div>
+        </div>
+        <div style="text-align:center;padding:10px;background:var(--surface2);border-radius:8px">
+          <div style="font-size:20px;font-weight:700;color:var(--danger)">${unranked}</div>
+          <div style="font-size:11px;color:var(--text2)">미노출</div>
+        </div>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text2)">
+        <span>총 키워드 <strong style="color:var(--text)">${keywords.length}개</strong></span>
+        <span>체크 완료 <strong style="color:var(--text)">${checkedKw}개</strong></span>
+        <span>블로그 <strong style="color:var(--text)">${(b.blogs||[]).length}개</strong></span>
+      </div>
+      <div style="margin-top:10px">
+        <div style="height:6px;background:var(--border);border-radius:3px;overflow:hidden">
+          <div style="height:100%;background:linear-gradient(90deg,#ffd700,var(--success));border-radius:3px;width:${keywords.length?Math.round(top15/keywords.length*100):0}%"></div>
+        </div>
+        <div style="text-align:right;font-size:11px;color:var(--text2);margin-top:4px">15위 이내 ${keywords.length?Math.round(top15/keywords.length*100):0}%</div>
+      </div>
+    </div>`;
+  }).join('');
 }
 
 // ===== 빠른 조회 =====
@@ -1226,40 +1310,33 @@ function generateReport() {
 
   targets.forEach(([key,b])=>{
     content+=`▶ ${b.name}\n`;
-    const bRankings=Object.values(rankings).filter(r=>r.branchKey===key && r.rank);
-    if (!bRankings.length) { content+='  (순위 데이터 없음)\n\n'; return; }
+    const keywords = b.keywords || [];
+    if (!keywords.length) { content+='  (키워드 없음)\n\n'; return; }
 
-    // 키워드별로 묶기
+    // 순위 데이터를 키워드별로 묶기
     const byKw={};
-    bRankings.forEach(r=>{
+    Object.values(rankings).filter(r=>r.branchKey===key).forEach(r=>{
       if (!byKw[r.keyword]) byKw[r.keyword]={blog:[], cafe:[]};
       if (r.tab==='카페') byKw[r.keyword].cafe.push(r);
       else byKw[r.keyword].blog.push(r);
     });
 
-    // 키워드별 최상위 순위 기준 정렬
-    const sorted = Object.entries(byKw).sort(([,a],[,b])=>{
-      const aRank = Math.min(...[...a.blog,...a.cafe].map(r=>r.rank||999));
-      const bRank = Math.min(...[...b.blog,...b.cafe].map(r=>r.rank||999));
+    // 지점에 등록된 모든 키워드 기준으로 표시
+    const sorted = keywords.slice().sort((a,b)=>{
+      const aData = byKw[a] || {blog:[], cafe:[]};
+      const bData = byKw[b] || {blog:[], cafe:[]};
+      const aRank = Math.min(...[...aData.blog,...aData.cafe].map(r=>r.rank||999), 999);
+      const bRank = Math.min(...[...bData.blog,...bData.cafe].map(r=>r.rank||999), 999);
       return aRank - bRank;
     });
 
-    sorted.forEach(([kw, tabs])=>{
+    sorted.forEach(kw=>{
+      const tabs = byKw[kw] || {blog:[], cafe:[]};
       content += `  • ${kw}\n`;
-      // 블로그탭 - 순위순 정렬
-      const blogSorted = tabs.blog.sort((a,b)=>a.rank-b.rank);
-      if (blogSorted.length) {
-        content += `    [블로그] ${blogSorted.map(r=>`${r.rank}위`).join(' / ')}\n`;
-      } else {
-        content += `    [블로그] -\n`;
-      }
-      // 카페탭 - 순위순 정렬
-      const cafeSorted = tabs.cafe.sort((a,b)=>a.rank-b.rank);
-      if (cafeSorted.length) {
-        content += `    [카페]   ${cafeSorted.map(r=>`${r.rank}위`).join(' / ')}\n`;
-      } else {
-        content += `    [카페]   -\n`;
-      }
+      const blogSorted = tabs.blog.filter(r=>r.rank).sort((a,b)=>a.rank-b.rank);
+      content += `    [블로그] ${blogSorted.length ? blogSorted.map(r=>`${r.rank}위`).join(' / ') : '-'}\n`;
+      const cafeSorted = tabs.cafe.filter(r=>r.rank).sort((a,b)=>a.rank-b.rank);
+      content += `    [카페]   ${cafeSorted.length ? cafeSorted.map(r=>`${r.rank}위`).join(' / ') : '-'}\n`;
     });
     content+='\n';
   });
