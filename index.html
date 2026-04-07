@@ -1,0 +1,1357 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>랭크매니저 — 블로그 순위 자동화</title>
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Pretendard:wght@400;500;600;700&display=swap');
+
+:root {
+  --bg:#0f1117; --surface:#1a1d27; --surface2:#22263a;
+  --border:#2e3350; --accent:#4f8ef7; --accent2:#7c5ef7;
+  --success:#22c97a; --warning:#f7a24f; --danger:#f74f4f;
+  --text:#e8eaf6; --text2:#8890b0; --text3:#555e80;
+  --radius:12px; --radius-sm:8px;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:'Pretendard',-apple-system,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;font-size:14px;}
+
+/* ===== 로그인 화면 ===== */
+#login-screen{
+  display:flex;align-items:center;justify-content:center;
+  min-height:100vh;background:var(--bg);
+}
+.login-box{
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--radius);padding:40px;width:360px;text-align:center;
+}
+.login-logo{font-size:32px;margin-bottom:8px;}
+.login-title{font-size:20px;font-weight:700;margin-bottom:4px;}
+.login-sub{font-size:13px;color:var(--text2);margin-bottom:28px;}
+.login-input{
+  width:100%;background:var(--surface2);border:1px solid var(--border);
+  border-radius:var(--radius-sm);color:var(--text);padding:12px 16px;
+  font-size:15px;font-family:inherit;text-align:center;letter-spacing:4px;
+  margin-bottom:12px;transition:border-color .15s;
+}
+.login-input:focus{outline:none;border-color:var(--accent);}
+.login-btn{
+  width:100%;background:var(--accent);color:#fff;border:none;
+  border-radius:var(--radius-sm);padding:12px;font-size:15px;
+  font-weight:600;cursor:pointer;font-family:inherit;transition:background .15s;
+}
+.login-btn:hover{background:#3a7ef6;}
+.login-error{color:var(--danger);font-size:13px;margin-top:8px;display:none;}
+
+/* ===== 앱 레이아웃 ===== */
+#app{display:none;}
+.layout{display:flex;min-height:100vh;}
+.sidebar{
+  width:220px;background:var(--surface);border-right:1px solid var(--border);
+  padding:24px 0;position:fixed;height:100vh;overflow-y:auto;z-index:100;
+}
+.logo{padding:0 20px 24px;border-bottom:1px solid var(--border);margin-bottom:16px;}
+.logo-title{font-size:15px;font-weight:700;letter-spacing:-0.3px;}
+.logo-sub{font-size:11px;color:var(--text3);margin-top:2px;}
+.nav-section{font-size:10px;font-weight:600;color:var(--text3);letter-spacing:.8px;padding:16px 20px 6px;text-transform:uppercase;}
+.nav-item{
+  display:flex;align-items:center;gap:10px;padding:10px 20px;
+  cursor:pointer;color:var(--text2);font-size:13px;font-weight:500;
+  transition:all .15s;border-left:3px solid transparent;
+}
+.nav-item:hover{background:var(--surface2);color:var(--text);}
+.nav-item.active{background:var(--surface2);color:var(--accent);border-left-color:var(--accent);}
+.nav-icon{font-size:16px;width:20px;text-align:center;}
+.main{margin-left:220px;flex:1;padding:28px 32px;max-width:calc(100vw - 220px);}
+
+/* ===== 공통 컴포넌트 ===== */
+.page{display:none;} .page.active{display:block;}
+.page-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;}
+.page-title{font-size:20px;font-weight:700;letter-spacing:-.5px;}
+.page-sub{font-size:13px;color:var(--text2);margin-top:2px;}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px;margin-bottom:20px;}
+.card-title{font-size:13px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:16px;}
+.btn{display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:var(--radius-sm);font-size:13px;font-weight:600;cursor:pointer;border:none;transition:all .15s;font-family:inherit;}
+.btn-primary{background:var(--accent);color:#fff;} .btn-primary:hover{background:#3a7ef6;}
+.btn-secondary{background:var(--surface2);color:var(--text);border:1px solid var(--border);} .btn-secondary:hover{background:var(--border);}
+.btn-danger{background:transparent;color:var(--danger);border:1px solid var(--danger);padding:4px 10px;font-size:12px;} .btn-danger:hover{background:var(--danger);color:#fff;}
+.btn-success{background:var(--success);color:#000;} .btn-success:hover{background:#1ab36c;}
+.btn-sm{padding:5px 12px;font-size:12px;}
+.btn:disabled{opacity:.5;cursor:not-allowed;}
+input,select,textarea{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:9px 12px;font-size:13px;font-family:inherit;transition:border-color .15s;width:100%;}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent);}
+input::placeholder{color:var(--text3);}
+.form-row{display:grid;gap:12px;margin-bottom:12px;}
+.form-row.col2{grid-template-columns:1fr 1fr;}
+.form-row.col3{grid-template-columns:1fr 1fr 1fr;}
+.form-group{display:flex;flex-direction:column;}
+.form-label{font-size:12px;color:var(--text2);font-weight:500;margin-bottom:5px;}
+.table-wrap{overflow-x:auto;}
+table{width:100%;border-collapse:collapse;}
+th{font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;padding:10px 12px;text-align:left;border-bottom:1px solid var(--border);}
+td{padding:12px;border-bottom:1px solid var(--border);font-size:13px;vertical-align:middle;}
+tr:last-child td{border-bottom:none;}
+tr:hover td{background:var(--surface2);}
+.badge{display:inline-flex;align-items:center;padding:3px 8px;border-radius:20px;font-size:11px;font-weight:600;}
+.badge-up{background:rgba(34,201,122,.15);color:var(--success);}
+.badge-down{background:rgba(247,79,79,.15);color:var(--danger);}
+.badge-same{background:rgba(136,144,176,.15);color:var(--text2);}
+.badge-new{background:rgba(79,142,247,.15);color:var(--accent);}
+.badge-out{background:rgba(247,162,79,.15);color:var(--warning);}
+.rank-num{font-size:18px;font-weight:700;}
+.rank-num.top1{color:#ffd700;} .rank-num.top3{color:var(--warning);}
+.rank-num.top10{color:var(--success);} .rank-num.out{color:var(--text3);font-size:13px;}
+.stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:20px;}
+.stat-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px 20px;}
+.stat-label{font-size:12px;color:var(--text2);margin-bottom:6px;}
+.stat-value{font-size:26px;font-weight:700;letter-spacing:-1px;}
+.stat-change{font-size:12px;color:var(--text3);margin-top:4px;}
+.stat-change.up{color:var(--success);} .stat-change.down{color:var(--danger);}
+.alert{padding:12px 16px;border-radius:var(--radius-sm);font-size:13px;margin-bottom:16px;display:flex;align-items:center;gap:8px;}
+.alert-warning{background:rgba(247,162,79,.1);border:1px solid rgba(247,162,79,.3);color:var(--warning);}
+.alert-danger{background:rgba(247,79,79,.1);border:1px solid rgba(247,79,79,.3);color:var(--danger);}
+.alert-success{background:rgba(34,201,122,.1);border:1px solid rgba(34,201,122,.3);color:var(--success);}
+.alert-info{background:rgba(79,142,247,.1);border:1px solid rgba(79,142,247,.3);color:var(--accent);}
+.spinner{width:16px;height:16px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;display:inline-block;}
+@keyframes spin{to{transform:rotate(360deg);}}
+.progress-bar{height:6px;background:var(--border);border-radius:3px;overflow:hidden;margin:8px 0;}
+.progress-fill{height:100%;background:linear-gradient(90deg,var(--accent),var(--accent2));border-radius:3px;transition:width .3s;}
+.kw-tags{display:flex;flex-wrap:wrap;gap:6px;}
+.kw-tag{background:var(--surface2);border:1px solid var(--border);border-radius:20px;padding:3px 10px;font-size:12px;color:var(--text2);display:flex;align-items:center;gap:4px;}
+.kw-tag .remove{cursor:pointer;color:var(--text3);font-size:14px;line-height:1;} .kw-tag .remove:hover{color:var(--danger);}
+.missing-card{background:rgba(247,79,79,.06);border:1px solid rgba(247,79,79,.2);border-radius:var(--radius-sm);padding:12px 16px;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between;}
+.missing-title{font-size:13px;font-weight:600;color:var(--danger);}
+.missing-sub{font-size:12px;color:var(--text2);margin-top:2px;}
+.report-preview{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:16px;font-size:13px;line-height:1.8;white-space:pre-wrap;max-height:300px;overflow-y:auto;}
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:1000;display:flex;align-items:center;justify-content:center;opacity:0;pointer-events:none;transition:opacity .2s;}
+.modal-overlay.open{opacity:1;pointer-events:all;}
+.modal{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:24px;width:520px;max-width:90vw;max-height:85vh;overflow-y:auto;transform:translateY(12px);transition:transform .2s;}
+.modal-overlay.open .modal{transform:translateY(0);}
+.modal-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;}
+.modal-title{font-size:16px;font-weight:700;}
+.modal-close{background:none;border:none;color:var(--text3);font-size:20px;cursor:pointer;padding:4px;} .modal-close:hover{color:var(--text);}
+.flex{display:flex;} .flex-between{display:flex;justify-content:space-between;align-items:center;}
+.gap-8{gap:8px;} .gap-12{gap:12px;}
+.mt-8{margin-top:8px;} .mt-16{margin-top:16px;} .mb-8{margin-bottom:8px;}
+.text-sm{font-size:12px;} .text-muted{color:var(--text2);} .text-danger{color:var(--danger);}
+.text-success{color:var(--success);} .text-accent{color:var(--accent);}
+.empty-state{text-align:center;padding:48px 24px;color:var(--text3);}
+.empty-icon{font-size:36px;margin-bottom:12px;}
+.empty-title{font-size:15px;font-weight:600;color:var(--text2);margin-bottom:6px;}
+.sync-dot{width:8px;height:8px;border-radius:50%;background:var(--success);display:inline-block;animation:pulse 2s infinite;}
+@keyframes pulse{0%,100%{opacity:1;}50%{opacity:.4;}}
+::-webkit-scrollbar{width:6px;height:6px;}
+::-webkit-scrollbar-track{background:transparent;}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px;}
+</style>
+</head>
+<body>
+
+<!-- ===== 로그인 화면 ===== -->
+<div id="login-screen">
+  <div class="login-box">
+    <div class="login-logo">📊</div>
+    <div class="login-title">랭크매니저</div>
+    <div class="login-sub">블로그 순위 자동화 시스템</div>
+    <input type="password" class="login-input" id="pw-input" placeholder="비밀번호 입력" onkeydown="if(event.key==='Enter')doLogin()">
+    <button class="login-btn" onclick="doLogin()">로그인</button>
+    <div class="login-error" id="login-error">비밀번호가 틀렸습니다</div>
+  </div>
+</div>
+
+<!-- ===== 앱 본체 ===== -->
+<div id="app">
+<div class="layout">
+
+  <!-- 사이드바 -->
+  <aside class="sidebar">
+    <div class="logo">
+      <div class="logo-title">📊 랭크매니저</div>
+      <div class="logo-sub" id="sync-status">
+        <span class="sync-dot"></span> Firebase 연결됨
+      </div>
+    </div>
+    <div class="nav-section">메인</div>
+    <div class="nav-item active" data-page="dashboard" onclick="goPage(this)">
+      <span class="nav-icon">🏠</span> 대시보드
+    </div>
+    <div class="nav-item" data-page="quick" onclick="goPage(this)">
+      <span class="nav-icon">⚡</span> 빠른 조회
+    </div>
+    <div class="nav-item" data-page="clients" onclick="goPage(this)">
+      <span class="nav-icon">👥</span> 클라이언트
+    </div>
+    <div class="nav-item" data-page="bulkimport" onclick="goPage(this)">
+      <span class="nav-icon">📤</span> 일괄 등록
+    </div>
+    <div class="nav-item" data-page="template" onclick="goPage(this)">
+      <span class="nav-icon">🏷️</span> 키워드 템플릿
+    </div>
+    <div class="nav-item" data-page="ranking" onclick="goPage(this)">
+      <span class="nav-icon">📈</span> 순위 현황
+    </div>
+    <div class="nav-section">자동화</div>
+    <div class="nav-item" data-page="missing" onclick="goPage(this)">
+      <span class="nav-icon">🚨</span> 누락 감지
+    </div>
+    <div class="nav-item" data-page="report" onclick="goPage(this)">
+      <span class="nav-icon">📋</span> 보고서 발송
+    </div>
+    <div class="nav-section">설정</div>
+    <div class="nav-item" data-page="settings" onclick="goPage(this)">
+      <span class="nav-icon">⚙️</span> 설정
+    </div>
+    <div class="nav-item" onclick="doLogout()" style="margin-top:8px">
+      <span class="nav-icon">🚪</span> 로그아웃
+    </div>
+  </aside>
+
+  <main class="main">
+
+    <!-- ===== 대시보드 ===== -->
+    <div id="page-dashboard" class="page active">
+      <div class="page-header">
+        <div>
+          <div class="page-title">대시보드</div>
+          <div class="page-sub" id="today-date"></div>
+        </div>
+        <button class="btn btn-primary" onclick="runAllCheck()">
+          <span id="check-icon">🔄</span> 전체 순위 체크
+        </button>
+      </div>
+      <div id="api-warning" class="alert alert-warning" style="display:none">
+        ⚠️ 네이버 API 키가 설정되지 않았습니다.
+        <span class="text-accent" style="cursor:pointer" onclick="goPageByName('settings')">설정하기 →</span>
+      </div>
+      <div class="stat-grid">
+        <div class="stat-card">
+          <div class="stat-label">관리 클라이언트</div>
+          <div class="stat-value text-accent" id="stat-clients">0</div>
+          <div class="stat-change">총 등록 업체</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">총 키워드</div>
+          <div class="stat-value" id="stat-keywords">0</div>
+          <div class="stat-change">모니터링 중</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">오늘 이탈</div>
+          <div class="stat-value text-danger" id="stat-missing">0</div>
+          <div class="stat-change down">확인 필요</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">마지막 체크</div>
+          <div class="stat-value" style="font-size:18px" id="stat-lastcheck">-</div>
+          <div class="stat-change" id="stat-lastcheck-sub">-</div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">🚨 순위 이탈 알림</div>
+        <div id="dashboard-missing-list">
+          <div class="empty-state">
+            <div class="empty-icon">✅</div>
+            <div class="empty-title">이탈 없음</div>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">📊 최근 순위 현황</div>
+        <div id="dashboard-rank-list">
+          <div class="empty-state">
+            <div class="empty-icon">📭</div>
+            <div class="empty-title">아직 데이터 없음</div>
+            <div class="empty-sub">전체 순위 체크 버튼을 눌러주세요</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== 빠른 조회 ===== -->
+    <div id="page-quick" class="page">
+      <div class="page-header">
+        <div>
+          <div class="page-title">⚡ 빠른 순위 조회</div>
+          <div class="page-sub">URL + 키워드 입력하면 바로 확인</div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="form-row col2">
+          <div class="form-group">
+            <div class="form-label">블로그 URL *</div>
+            <input type="text" id="q-url" placeholder="blog.naver.com/myid">
+          </div>
+          <div class="form-group">
+            <div class="form-label">검색 키워드 *</div>
+            <input type="text" id="q-keyword" placeholder="강남 피부과 추천" onkeydown="if(event.key==='Enter')quickCheck()">
+          </div>
+        </div>
+        <div class="flex gap-8">
+          <button class="btn btn-primary" onclick="quickCheck()"><span id="q-icon">🔍</span> 순위 조회</button>
+          <button class="btn btn-secondary" onclick="showMultiArea()">📋 여러 키워드 한번에</button>
+        </div>
+      </div>
+      <div id="q-result" style="display:none">
+        <div class="card" style="text-align:center;padding:32px">
+          <div id="q-result-rank" style="font-size:64px;font-weight:700;margin-bottom:8px"></div>
+          <div id="q-result-keyword" style="font-size:16px;color:var(--text2);margin-bottom:4px"></div>
+          <div id="q-result-url" style="font-size:13px;color:var(--text3)"></div>
+          <div id="q-result-msg" style="margin-top:16px"></div>
+          <button class="btn btn-secondary btn-sm" style="margin-top:16px" onclick="addToClient()">+ 클라이언트에 추가</button>
+        </div>
+      </div>
+      <div id="q-multi-area" style="display:none">
+        <div class="card">
+          <div class="card-title">여러 키워드 입력</div>
+          <div class="form-group">
+            <div class="form-label">키워드 목록 (줄바꿈으로 구분)</div>
+            <textarea id="q-multi-keywords" rows="6" placeholder="강남 피부과 추천&#10;강남역 피부과&#10;강남 레이저 토닝"></textarea>
+          </div>
+          <div class="flex gap-8 mt-8">
+            <button class="btn btn-primary" onclick="runMultiCheck()"><span id="q-multi-icon">🔍</span> 전체 조회</button>
+            <button class="btn btn-secondary" onclick="document.getElementById('q-multi-area').style.display='none'">취소</button>
+          </div>
+          <div id="q-multi-progress" style="display:none;margin-top:12px">
+            <div class="alert alert-info"><span class="spinner"></span><span id="q-multi-progress-text">조회 중...</span></div>
+            <div class="progress-bar"><div class="progress-fill" id="q-multi-progress-fill" style="width:0%"></div></div>
+          </div>
+        </div>
+      </div>
+      <div id="q-multi-result" style="display:none">
+        <div class="card">
+          <div class="flex-between mb-8">
+            <div class="card-title">조회 결과</div>
+            <button class="btn btn-secondary btn-sm" onclick="addMultiToClient()">+ 클라이언트에 추가</button>
+          </div>
+          <div class="table-wrap">
+            <table><thead><tr><th>키워드</th><th>순위</th><th>상태</th></tr></thead>
+            <tbody id="q-multi-result-list"></tbody></table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== 클라이언트 관리 ===== -->
+    <div id="page-clients" class="page">
+      <div class="page-header">
+        <div>
+          <div class="page-title">클라이언트 관리</div>
+          <div class="page-sub">업체별 블로그 URL과 키워드 관리</div>
+        </div>
+        <button class="btn btn-primary" onclick="openAddClient()">+ 클라이언트 추가</button>
+      </div>
+      <div class="card" style="padding:12px 20px">
+        <input type="text" placeholder="🔍 업체명 검색..." style="max-width:300px" oninput="filterClients(this.value)">
+      </div>
+      <div class="card">
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>업체명</th><th>블로그 URL</th><th>키워드 수</th><th>마지막 체크</th><th>작업</th></tr></thead>
+            <tbody id="client-list"></tbody>
+          </table>
+        </div>
+        <div id="client-empty" class="empty-state" style="display:none">
+          <div class="empty-icon">👥</div>
+          <div class="empty-title">등록된 클라이언트 없음</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== 일괄 등록 ===== -->
+    <div id="page-bulkimport" class="page">
+      <div class="page-header">
+        <div>
+          <div class="page-title">📤 일괄 등록</div>
+          <div class="page-sub">CSV/붙여넣기로 100개를 한번에 등록</div>
+        </div>
+        <button class="btn btn-secondary" onclick="downloadTemplate()">⬇️ 양식 다운로드</button>
+      </div>
+      <div class="card">
+        <div class="card-title">방법 1 — CSV 파일 업로드</div>
+        <div class="alert alert-info" style="margin-bottom:16px">
+          💡 양식 다운로드 후 엑셀에서 채워서 업로드하세요<br>
+          형식: <code style="background:var(--surface2);padding:2px 6px;border-radius:4px">업체명, 블로그URL, 키워드1, 키워드2, ...</code>
+        </div>
+        <div id="drop-zone" style="border:2px dashed var(--border);border-radius:var(--radius);padding:40px;text-align:center;cursor:pointer;transition:all .2s;margin-bottom:12px"
+          onclick="document.getElementById('csv-file').click()"
+          ondragover="event.preventDefault();this.style.borderColor='var(--accent)'"
+          ondragleave="this.style.borderColor='var(--border)'"
+          ondrop="handleDrop(event)">
+          <div style="font-size:32px;margin-bottom:8px">📁</div>
+          <div style="font-weight:600;margin-bottom:4px">CSV 파일 드래그 또는 클릭</div>
+          <div class="text-muted text-sm">UTF-8 CSV (.csv)</div>
+        </div>
+        <input type="file" id="csv-file" accept=".csv" style="display:none" onchange="handleFileUpload(event)">
+        <div id="bulk-preview" style="display:none">
+          <div class="alert alert-success" id="bulk-parse-msg"></div>
+          <div class="table-wrap" style="max-height:280px;overflow-y:auto;margin-bottom:12px">
+            <table><thead><tr><th>업체명</th><th>블로그URL</th><th>키워드 수</th><th>키워드 미리보기</th></tr></thead>
+            <tbody id="bulk-preview-body"></tbody></table>
+          </div>
+          <div class="flex gap-8">
+            <button class="btn btn-primary" onclick="confirmImport('bulk')">✅ 전체 등록</button>
+            <button class="btn btn-secondary" onclick="document.getElementById('bulk-preview').style.display='none'">취소</button>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">방법 2 — 엑셀에서 복사 붙여넣기</div>
+        <div class="form-label mb-8">엑셀 셀 범위 복사 후 아래에 Ctrl+V</div>
+        <textarea id="bulk-paste" rows="8" placeholder="업체명	블로그URL	키워드1	키워드2	키워드3&#10;강남피부과	blog.naver.com/abc	강남피부과	강남레이저토닝	강남보톡스&#10;잠실피부과	blog.naver.com/def	잠실피부과	잠실리프팅"></textarea>
+        <div class="flex gap-8 mt-8">
+          <button class="btn btn-primary" onclick="parsePaste()">📋 분석 및 등록</button>
+          <button class="btn btn-secondary" onclick="document.getElementById('bulk-paste').value=''">지우기</button>
+        </div>
+        <div id="paste-preview" style="display:none;margin-top:16px">
+          <div class="alert alert-success" id="paste-parse-msg"></div>
+          <div class="table-wrap" style="max-height:280px;overflow-y:auto;margin-bottom:12px">
+            <table><thead><tr><th>업체명</th><th>블로그URL</th><th>키워드 수</th><th>키워드 미리보기</th></tr></thead>
+            <tbody id="paste-preview-body"></tbody></table>
+          </div>
+          <button class="btn btn-primary" onclick="confirmImport('paste')">✅ 전체 등록</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== 키워드 템플릿 ===== -->
+    <div id="page-template" class="page">
+      <div class="page-header">
+        <div>
+          <div class="page-title">🏷️ 키워드 템플릿</div>
+          <div class="page-sub">피부과 키워드 자동 조합 생성</div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="form-row col2" style="margin-bottom:16px">
+          <div class="form-group">
+            <div class="form-label">지역명 (쉼표 구분)</div>
+            <input type="text" id="tmpl-regions" value="강남, 잠실, 부평, 구월">
+          </div>
+          <div class="form-group">
+            <div class="form-label">조합 방식</div>
+            <select id="tmpl-style">
+              <option value="region_first">지역 + 시술 (강남 레이저토닝)</option>
+              <option value="clinic_first">지역 + 피부과 + 시술 (강남 피부과 레이저토닝)</option>
+              <option value="both">둘 다</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-label mb-8">시술 카테고리 선택</div>
+        <div id="tmpl-categories" style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px"></div>
+        <button class="btn btn-primary" onclick="generateTemplateKeywords()">⚡ 키워드 생성</button>
+        <div id="tmpl-result" style="display:none;margin-top:20px">
+          <div class="flex-between mb-8">
+            <div class="card-title" id="tmpl-count"></div>
+            <div class="flex gap-8">
+              <button class="btn btn-secondary btn-sm" onclick="copyTemplateKeywords()">📋 복사</button>
+              <button class="btn btn-primary btn-sm" onclick="applyTemplateToAll()">✅ 전체 클라이언트에 적용</button>
+            </div>
+          </div>
+          <div class="kw-tags" id="tmpl-kw-tags" style="max-height:200px;overflow-y:auto"></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">특정 클라이언트에만 적용</div>
+        <div class="form-row col2">
+          <div class="form-group">
+            <div class="form-label">클라이언트 선택</div>
+            <select id="tmpl-target-client"><option value="">선택...</option></select>
+          </div>
+          <div class="form-group" style="justify-content:flex-end;padding-top:20px">
+            <button class="btn btn-primary" onclick="applyTemplateToClient()">이 클라이언트에 적용</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== 순위 현황 ===== -->
+    <div id="page-ranking" class="page">
+      <div class="page-header">
+        <div>
+          <div class="page-title">순위 현황</div>
+          <div class="page-sub">키워드별 네이버 블로그 순위</div>
+        </div>
+        <div class="flex gap-8">
+          <select id="rank-client-filter" style="width:180px" onchange="renderRankingList()">
+            <option value="">전체 클라이언트</option>
+          </select>
+          <button class="btn btn-primary" onclick="runAllCheck()">🔄 순위 체크</button>
+        </div>
+      </div>
+      <div id="rank-progress" style="display:none">
+        <div class="alert alert-info"><span class="spinner"></span><span id="rank-progress-text">체크 중...</span></div>
+        <div class="progress-bar"><div class="progress-fill" id="rank-progress-fill" style="width:0%"></div></div>
+      </div>
+      <div class="card">
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>업체명</th><th>키워드</th><th>현재 순위</th><th>변동</th><th>이전 순위</th><th>체크 시각</th></tr></thead>
+            <tbody id="ranking-list"></tbody>
+          </table>
+        </div>
+        <div id="ranking-empty" class="empty-state">
+          <div class="empty-icon">📊</div>
+          <div class="empty-title">순위 데이터 없음</div>
+          <div class="empty-sub">순위 체크 버튼을 눌러주세요</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== 누락 감지 ===== -->
+    <div id="page-missing" class="page">
+      <div class="page-header">
+        <div>
+          <div class="page-title">🚨 순위 이탈 감지</div>
+          <div class="page-sub">100위 밖이거나 급락한 키워드</div>
+        </div>
+      </div>
+      <div class="stat-grid" style="grid-template-columns:repeat(3,1fr)">
+        <div class="stat-card"><div class="stat-label">100위 이탈</div><div class="stat-value text-danger" id="missing-out">0</div></div>
+        <div class="stat-card"><div class="stat-label">10위 이상 하락</div><div class="stat-value text-warning" id="missing-drop">0</div></div>
+        <div class="stat-card"><div class="stat-label">신규 진입</div><div class="stat-value text-success" id="missing-new">0</div></div>
+      </div>
+      <div class="card">
+        <div class="card-title">이탈 목록</div>
+        <div id="missing-list">
+          <div class="empty-state"><div class="empty-icon">✅</div><div class="empty-title">이탈 없음</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== 보고서 발송 ===== -->
+    <div id="page-report" class="page">
+      <div class="page-header">
+        <div>
+          <div class="page-title">보고서 발송</div>
+          <div class="page-sub">클라이언트별 순위 보고서 생성 및 발송</div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="form-row col2">
+          <div class="form-group">
+            <div class="form-label">클라이언트</div>
+            <select id="report-client"><option value="">전체</option></select>
+          </div>
+          <div class="form-group">
+            <div class="form-label">보고서 유형</div>
+            <select id="report-type"><option value="daily">일간</option><option value="weekly">주간</option></select>
+          </div>
+        </div>
+        <button class="btn btn-primary" onclick="generateReport()">📋 보고서 생성</button>
+      </div>
+      <div id="report-area" style="display:none">
+        <div class="card">
+          <div class="flex-between mb-8">
+            <div class="card-title">미리보기</div>
+            <div class="flex gap-8">
+              <button class="btn btn-secondary btn-sm" onclick="copyReport()">📋 복사</button>
+              <button class="btn btn-success btn-sm" onclick="sendKakao()">💬 카카오톡</button>
+              <button class="btn btn-primary btn-sm" onclick="sendEmail()">📧 이메일</button>
+            </div>
+          </div>
+          <div class="report-preview" id="report-content"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== 설정 ===== -->
+    <div id="page-settings" class="page">
+      <div class="page-header">
+        <div><div class="page-title">설정</div><div class="page-sub">API 키 및 시스템 설정</div></div>
+      </div>
+      <div class="card">
+        <div class="card-title">네이버 검색 API</div>
+        <div class="alert alert-info" style="margin-bottom:16px">
+          💡 설정은 Firebase에 저장되어 모든 직원이 공유합니다
+        </div>
+        <div style="padding:14px 0;border-bottom:1px solid var(--border)">
+          <div class="form-label">Client ID</div>
+          <input type="text" id="set-client-id" placeholder="네이버 Client ID" style="max-width:360px;margin-top:6px">
+        </div>
+        <div style="padding:14px 0;border-bottom:1px solid var(--border)">
+          <div class="form-label">Client Secret</div>
+          <input type="password" id="set-client-secret" placeholder="네이버 Client Secret" style="max-width:360px;margin-top:6px">
+        </div>
+        <div style="padding:14px 0;border-bottom:1px solid var(--border)">
+          <div class="form-label">순위 체크 범위</div>
+          <select id="set-rank-depth" style="max-width:180px;margin-top:6px">
+            <option value="30">30위까지</option>
+            <option value="50" selected>50위까지</option>
+            <option value="100">100위까지</option>
+          </select>
+        </div>
+        <div style="padding:14px 0;border-bottom:1px solid var(--border)">
+          <div class="form-label">이탈 기준</div>
+          <select id="set-missing-threshold" style="max-width:180px;margin-top:6px">
+            <option value="20">20위 밖</option>
+            <option value="30" selected>30위 밖</option>
+            <option value="50">50위 밖</option>
+            <option value="100">100위 밖</option>
+          </select>
+        </div>
+        <div class="flex gap-8 mt-16">
+          <button class="btn btn-primary" onclick="saveSettings()">💾 저장</button>
+          <button class="btn btn-secondary" onclick="testApi()">🧪 API 테스트</button>
+        </div>
+        <div id="api-test-result" class="mt-8" style="display:none"></div>
+      </div>
+      <div class="card">
+        <div class="card-title">비밀번호 변경</div>
+        <div class="form-row col2" style="max-width:480px">
+          <div class="form-group">
+            <div class="form-label">새 비밀번호</div>
+            <input type="password" id="new-pw" placeholder="새 비밀번호">
+          </div>
+          <div class="form-group">
+            <div class="form-label">확인</div>
+            <input type="password" id="new-pw-confirm" placeholder="비밀번호 확인">
+          </div>
+        </div>
+        <button class="btn btn-primary" onclick="changePassword()">🔑 비밀번호 변경</button>
+      </div>
+      <div class="card">
+        <div class="card-title">데이터 관리</div>
+        <div style="padding:12px 0;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
+          <div>
+            <div style="font-weight:500">순위 데이터 초기화</div>
+            <div class="text-muted text-sm">순위 기록만 삭제 (클라이언트 유지)</div>
+          </div>
+          <button class="btn btn-danger" onclick="clearRankData()">삭제</button>
+        </div>
+        <div style="padding:12px 0;display:flex;justify-content:space-between;align-items:center">
+          <div>
+            <div style="font-weight:500">전체 초기화</div>
+            <div class="text-muted text-sm">모든 데이터 삭제</div>
+          </div>
+          <button class="btn btn-danger" onclick="clearAll()">전체 삭제</button>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+</div>
+
+<!-- 클라이언트 모달 -->
+<div class="modal-overlay" id="client-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title" id="modal-title">클라이언트 추가</div>
+      <button class="modal-close" onclick="closeModal()">×</button>
+    </div>
+    <input type="hidden" id="edit-client-key">
+    <div class="form-row">
+      <div class="form-group"><div class="form-label">업체명 *</div><input type="text" id="c-name" placeholder="강남피부과"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><div class="form-label">블로그 URL *</div><input type="text" id="c-url" placeholder="blog.naver.com/myid"></div>
+    </div>
+    <div class="form-row col2">
+      <div class="form-group"><div class="form-label">연락처</div><input type="text" id="c-phone" placeholder="010-0000-0000"></div>
+      <div class="form-group"><div class="form-label">이메일</div><input type="text" id="c-email" placeholder="example@email.com"></div>
+    </div>
+    <div class="form-group mt-16">
+      <div class="form-label">키워드 (Enter로 추가)</div>
+      <div class="flex gap-8 mt-8">
+        <input type="text" id="kw-input" placeholder="키워드 입력 후 Enter" onkeydown="addKeyword(event)">
+        <button class="btn btn-secondary" style="white-space:nowrap" onclick="autoExtract()">🤖 자동추출</button>
+      </div>
+      <div id="auto-extract-status" style="display:none;margin-top:8px"></div>
+      <div class="kw-tags mt-8" id="kw-tags"></div>
+    </div>
+    <div class="flex gap-8 mt-16" style="justify-content:flex-end">
+      <button class="btn btn-secondary" onclick="closeModal()">취소</button>
+      <button class="btn btn-primary" onclick="saveClient()">저장</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ===== Firebase 설정 =====
+const firebaseConfig = {
+  apiKey: "AIzaSyC2NasueHW4NEluurRCYAojAxoYEG6DXxw",
+  authDomain: "rank-manager-29842.firebaseapp.com",
+  databaseURL: "https://rank-manager-29842-default-rtdb.firebaseio.com",
+  projectId: "rank-manager-29842",
+  storageBucket: "rank-manager-29842.firebasestorage.app",
+  messagingSenderId: "789568105350",
+  appId: "1:789568105350:web:ecad253eee821608b35a07"
+};
+
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+
+// ===== 상태 =====
+let clients = {};      // Firebase 실시간 동기화
+let rankings = {};     // Firebase 실시간 동기화
+let settings = {};     // Firebase 실시간 동기화
+let tempKeywords = [];
+let editingKey = null;
+let parsedBulkData = [];
+let generatedKeywords = [];
+
+const CLINIC_CATEGORIES = {
+  '레이저 시술': ['레이저토닝','피코레이저','루비레이저','엔디야그','IPL','브이빔','프락셀','아트모스'],
+  '리프팅':      ['울쎄라','써마지','리프팅','인모드','실리프팅','HIFU','열리프팅'],
+  '보톡스/필러': ['보톡스','필러','주름보톡스','사각턱보톡스','팔자주름필러','눈밑필러','콧대필러'],
+  '여드름/모공': ['여드름치료','여드름흉터','모공축소','모공치료','피지관리'],
+  '색소/미백':   ['기미치료','잡티제거','색소치료','미백치료','검버섯제거','주근깨'],
+  '피부관리':    ['피부관리','수분공급','피부재생','콜라겐관리','피부트러블'],
+  '제모':        ['레이저제모','제모','겨드랑이제모','다리제모'],
+  '비만/체형':   ['지방분해','체형관리','비만치료','셀룰라이트'],
+  '일반':        ['피부과','피부과추천','피부과잘하는곳','피부과후기','피부과비용']
+};
+
+// ===== 로그인 =====
+function doLogin() {
+  const pw = document.getElementById('pw-input').value;
+  db.ref('auth/password').once('value').then(snap => {
+    const stored = snap.val() || 'ttl0101!'; // 기본 비밀번호
+    if (pw === stored) {
+      sessionStorage.setItem('rm_auth', '1');
+      document.getElementById('login-screen').style.display = 'none';
+      document.getElementById('app').style.display = 'block';
+      initApp();
+    } else {
+      document.getElementById('login-error').style.display = 'block';
+      document.getElementById('pw-input').value = '';
+    }
+  });
+}
+
+function doLogout() {
+  sessionStorage.removeItem('rm_auth');
+  location.reload();
+}
+
+function changePassword() {
+  const pw = document.getElementById('new-pw').value;
+  const conf = document.getElementById('new-pw-confirm').value;
+  if (!pw) return alert('새 비밀번호를 입력해주세요.');
+  if (pw !== conf) return alert('비밀번호가 일치하지 않습니다.');
+  db.ref('auth/password').set(pw).then(() => {
+    alert('비밀번호가 변경됐습니다.');
+    document.getElementById('new-pw').value = '';
+    document.getElementById('new-pw-confirm').value = '';
+  });
+}
+
+// ===== 앱 초기화 =====
+function initApp() {
+  document.getElementById('today-date').textContent =
+    new Date().toLocaleDateString('ko-KR',{year:'numeric',month:'long',day:'numeric',weekday:'short'});
+
+  // Firebase 실시간 리스너
+  db.ref('clients').on('value', snap => {
+    clients = snap.val() || {};
+    renderClientList();
+    updateStats();
+    updateAllSelects();
+  });
+
+  db.ref('rankings').on('value', snap => {
+    rankings = snap.val() || {};
+    renderRankingList();
+    renderMissingList();
+    renderDashboard();
+    updateStats();
+  });
+
+  db.ref('settings').once('value').then(snap => {
+    settings = snap.val() || {};
+    document.getElementById('set-client-id').value = settings.clientId || '';
+    document.getElementById('set-client-secret').value = settings.clientSecret || '';
+    document.getElementById('set-rank-depth').value = settings.rankDepth || 50;
+    document.getElementById('set-missing-threshold').value = settings.missingThreshold || 30;
+    if (!settings.clientId) document.getElementById('api-warning').style.display = 'flex';
+  });
+
+  initTemplateCategories();
+}
+
+// 세션 체크 (이미 로그인된 경우)
+if (sessionStorage.getItem('rm_auth')) {
+  // Firebase 연결 후 비밀번호 없이 바로 입장
+  db.ref('auth/password').once('value').then(() => {
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('app').style.display = 'block';
+    initApp();
+  });
+}
+
+// ===== 페이지 전환 =====
+function goPage(el) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('page-' + el.dataset.page).classList.add('active');
+  el.classList.add('active');
+}
+function goPageByName(name) {
+  const el = document.querySelector(`[data-page="${name}"]`);
+  if (el) goPage(el);
+}
+
+// ===== 통계 =====
+function updateStats() {
+  const cList = Object.values(clients);
+  const rList = Object.values(rankings);
+  const totalKw = cList.reduce((s,c) => s + (c.keywords||[]).length, 0);
+  document.getElementById('stat-clients').textContent = cList.length;
+  document.getElementById('stat-keywords').textContent = totalKw;
+  const missing = getMissingList();
+  document.getElementById('stat-missing').textContent = missing.length;
+  document.getElementById('missing-out').textContent = missing.filter(m=>m.type==='out').length;
+  document.getElementById('missing-drop').textContent = missing.filter(m=>m.type==='drop').length;
+  document.getElementById('missing-new').textContent = missing.filter(m=>m.type==='new').length;
+  if (rList.length > 0) {
+    const last = rList.reduce((a,b) => new Date(a.checkedAt) > new Date(b.checkedAt) ? a : b);
+    const d = new Date(last.checkedAt);
+    document.getElementById('stat-lastcheck').textContent =
+      d.toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'});
+    document.getElementById('stat-lastcheck-sub').textContent =
+      d.toLocaleDateString('ko-KR',{month:'short',day:'numeric'});
+  }
+}
+
+// ===== 클라이언트 =====
+function openAddClient() {
+  editingKey = null; tempKeywords = [];
+  document.getElementById('modal-title').textContent = '클라이언트 추가';
+  document.getElementById('edit-client-key').value = '';
+  ['c-name','c-url','c-phone','c-email'].forEach(id => document.getElementById(id).value = '');
+  renderKwTags();
+  document.getElementById('client-modal').classList.add('open');
+}
+function openEditClient(key) {
+  const c = clients[key];
+  editingKey = key; tempKeywords = [...(c.keywords||[])];
+  document.getElementById('modal-title').textContent = '클라이언트 수정';
+  document.getElementById('edit-client-key').value = key;
+  document.getElementById('c-name').value = c.name||'';
+  document.getElementById('c-url').value = c.url||'';
+  document.getElementById('c-phone').value = c.phone||'';
+  document.getElementById('c-email').value = c.email||'';
+  renderKwTags();
+  document.getElementById('client-modal').classList.add('open');
+}
+function closeModal() { document.getElementById('client-modal').classList.remove('open'); }
+
+function saveClient() {
+  const name = document.getElementById('c-name').value.trim();
+  const url = document.getElementById('c-url').value.trim().replace(/https?:\/\//,'');
+  if (!name||!url) return alert('업체명과 URL은 필수입니다.');
+  const data = { name, url, phone:document.getElementById('c-phone').value.trim(),
+    email:document.getElementById('c-email').value.trim(), keywords:[...tempKeywords],
+    updatedAt: new Date().toISOString() };
+  const key = editingKey || db.ref('clients').push().key;
+  db.ref('clients/'+key).set(data).then(() => { closeModal(); });
+}
+
+function deleteClient(key) {
+  if (!confirm(`"${clients[key].name}" 삭제?`)) return;
+  db.ref('clients/'+key).remove();
+  // 해당 클라이언트 순위 데이터도 삭제
+  Object.keys(rankings).forEach(rk => {
+    if (rankings[rk].clientKey === key) db.ref('rankings/'+rk).remove();
+  });
+}
+
+function filterClients(q) {
+  document.querySelectorAll('#client-list tr').forEach(r => {
+    r.style.display = r.textContent.toLowerCase().includes(q.toLowerCase()) ? '' : 'none';
+  });
+}
+
+function renderClientList() {
+  const tbody = document.getElementById('client-list');
+  const empty = document.getElementById('client-empty');
+  const entries = Object.entries(clients);
+  if (entries.length === 0) { tbody.innerHTML=''; empty.style.display='block'; return; }
+  empty.style.display = 'none';
+  tbody.innerHTML = entries.map(([key,c]) => {
+    const lastRank = Object.values(rankings).filter(r=>r.clientKey===key)
+      .sort((a,b)=>new Date(b.checkedAt)-new Date(a.checkedAt))[0];
+    const lastCheck = lastRank
+      ? new Date(lastRank.checkedAt).toLocaleString('ko-KR',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})
+      : '-';
+    return `<tr>
+      <td><strong>${c.name}</strong></td>
+      <td><span class="text-accent text-sm">${c.url}</span></td>
+      <td><span class="badge badge-new">${(c.keywords||[]).length}개</span></td>
+      <td class="text-muted text-sm">${lastCheck}</td>
+      <td><div class="flex gap-8">
+        <button class="btn btn-secondary btn-sm" onclick="openEditClient('${key}')">수정</button>
+        <button class="btn btn-danger" onclick="deleteClient('${key}')">삭제</button>
+      </div></td>
+    </tr>`;
+  }).join('');
+}
+
+// ===== 키워드 =====
+function addKeyword(e) {
+  if (e.key !== 'Enter') return;
+  const val = document.getElementById('kw-input').value.trim();
+  if (!val||tempKeywords.includes(val)) return;
+  tempKeywords.push(val);
+  document.getElementById('kw-input').value = '';
+  renderKwTags();
+}
+function removeKeyword(kw) { tempKeywords = tempKeywords.filter(k=>k!==kw); renderKwTags(); }
+function renderKwTags() {
+  document.getElementById('kw-tags').innerHTML =
+    tempKeywords.map(kw => `<span class="kw-tag">${kw}<span class="remove" onclick="removeKeyword('${kw}')">×</span></span>`).join('');
+}
+
+async function autoExtract() {
+  const url = document.getElementById('c-url').value.trim();
+  if (!url) return alert('URL을 먼저 입력해주세요.');
+  const st = document.getElementById('auto-extract-status');
+  st.style.display = 'block';
+  st.innerHTML = '<div class="alert alert-info"><span class="spinner"></span> 분석 중...</div>';
+  const blogId = url.replace(/https?:\/\//,'').replace('blog.naver.com/','').split('/')[0];
+  try {
+    const res = await fetch(`https://openapi.naver.com/v1/search/blog?query=${encodeURIComponent(blogId)}&display=20&sort=date`,{
+      headers:{'X-Naver-Client-Id':settings.clientId,'X-Naver-Client-Secret':settings.clientSecret}
+    });
+    if (!res.ok) throw new Error('API 오류');
+    const data = await res.json();
+    const titles = (data.items||[]).map(it=>it.title.replace(/<[^>]*>/g,''));
+    const kws = extractKeywords(titles);
+    kws.forEach(kw => { if (!tempKeywords.includes(kw)) tempKeywords.push(kw); });
+    renderKwTags();
+    st.innerHTML = `<div class="alert alert-success">✅ ${kws.length}개 추출 완료</div>`;
+    setTimeout(()=>st.style.display='none', 3000);
+  } catch(e) {
+    st.innerHTML = `<div class="alert alert-danger">❌ 추출 실패: CORS 오류일 수 있습니다</div>`;
+  }
+}
+
+function extractKeywords(titles) {
+  const stops = new Set(['하는','있는','위한','에서','그리고','합니다','했습니다','입니다']);
+  const cnt = {};
+  titles.forEach(t => {
+    (t.match(/[가-힣]{2,8}/g)||[]).forEach(w => { if (!stops.has(w)) cnt[w]=(cnt[w]||0)+1; });
+  });
+  return Object.entries(cnt).sort(([,a],[,b])=>b-a).slice(0,15).map(([k])=>k);
+}
+
+// ===== 순위 체크 =====
+async function runAllCheck() {
+  if (!settings.clientId||!settings.clientSecret) {
+    alert('API 키를 먼저 설정해주세요.'); goPageByName('settings'); return;
+  }
+  const cEntries = Object.entries(clients);
+  if (cEntries.length === 0) return alert('등록된 클라이언트가 없습니다.');
+
+  const allItems = [];
+  cEntries.forEach(([key,c]) => {
+    (c.keywords||[]).forEach(kw => allItems.push({clientKey:key, clientName:c.name, url:c.url, keyword:kw}));
+  });
+  if (allItems.length === 0) return alert('등록된 키워드가 없습니다.');
+
+  document.getElementById('rank-progress').style.display = 'block';
+  document.getElementById('check-icon').textContent = '⏳';
+
+  for (let i = 0; i < allItems.length; i++) {
+    const item = allItems[i];
+    document.getElementById('rank-progress-text').textContent =
+      `체크 중: ${item.clientName} — ${item.keyword} (${i+1}/${allItems.length})`;
+    document.getElementById('rank-progress-fill').style.width = ((i/allItems.length)*100)+'%';
+
+    const rank = await checkRank(item.url, item.keyword);
+    const prevEntry = Object.values(rankings).find(r=>r.clientKey===item.clientKey&&r.keyword===item.keyword);
+    const rankKey = `${item.clientKey}_${item.keyword.replace(/\s+/g,'_')}`;
+
+    await db.ref('rankings/'+rankKey).set({
+      clientKey: item.clientKey,
+      clientName: item.clientName,
+      url: item.url,
+      keyword: item.keyword,
+      rank: rank,
+      prevRank: prevEntry ? prevEntry.rank : null,
+      checkedAt: new Date().toISOString()
+    });
+    await sleep(350);
+  }
+
+  document.getElementById('rank-progress').style.display = 'none';
+  document.getElementById('check-icon').textContent = '🔄';
+}
+
+async function checkRank(blogUrl, keyword) {
+  const depth = settings.rankDepth || 50;
+  const blogId = blogUrl.replace(/https?:\/\//,'').replace('blog.naver.com/','').split('/')[0];
+  try {
+    const res = await fetch(
+      `https://openapi.naver.com/v1/search/blog?query=${encodeURIComponent(keyword)}&display=${Math.min(depth,100)}&sort=sim`,
+      { headers:{'X-Naver-Client-Id':settings.clientId,'X-Naver-Client-Secret':settings.clientSecret} }
+    );
+    if (!res.ok) return null;
+    const data = await res.json();
+    const items = data.items||[];
+    for (let i=0;i<items.length;i++) {
+      if ((items[i].link||'').includes(blogId)||(items[i].bloggername||'').includes(blogId)) return i+1;
+    }
+    return null;
+  } catch(e) { return null; }
+}
+
+function sleep(ms) { return new Promise(r=>setTimeout(r,ms)); }
+
+// ===== 순위 렌더링 =====
+function renderRankingList() {
+  const tbody = document.getElementById('ranking-list');
+  const empty = document.getElementById('ranking-empty');
+  const filterVal = document.getElementById('rank-client-filter')?.value || '';
+  let data = Object.values(rankings);
+  if (filterVal) data = data.filter(r=>r.clientKey===filterVal);
+  if (data.length===0) { tbody.innerHTML=''; empty.style.display='block'; return; }
+  empty.style.display = 'none';
+  data.sort((a,b)=>(a.rank||999)-(b.rank||999));
+  tbody.innerHTML = data.map(r => `<tr>
+    <td><strong>${r.clientName}</strong></td>
+    <td>${r.keyword}</td>
+    <td>${rankBadge(r.rank)}</td>
+    <td>${changeBadge(r.rank,r.prevRank)}</td>
+    <td class="text-muted">${r.prevRank?r.prevRank+'위':'-'}</td>
+    <td class="text-muted text-sm">${new Date(r.checkedAt).toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'})}</td>
+  </tr>`).join('');
+}
+
+function rankBadge(rank) {
+  if (!rank) return `<span class="rank-num out">100위 밖</span>`;
+  const cls = rank===1?'top1':rank<=3?'top3':rank<=10?'top10':'';
+  return `<span class="rank-num ${cls}">${rank}위</span>`;
+}
+function changeBadge(cur,prev) {
+  if (!prev) return `<span class="badge badge-new">신규</span>`;
+  if (!cur) return `<span class="badge badge-out">이탈</span>`;
+  const d = prev-cur;
+  if (d>0) return `<span class="badge badge-up">▲ ${d}</span>`;
+  if (d<0) return `<span class="badge badge-down">▼ ${Math.abs(d)}</span>`;
+  return `<span class="badge badge-same">— 유지</span>`;
+}
+
+// ===== 누락 감지 =====
+function getMissingList() {
+  return Object.values(rankings).reduce((acc,r) => {
+    if (!r.rank) acc.push({...r,type:'out',reason:'100위 밖 이탈'});
+    else if (r.prevRank && (r.prevRank-r.rank)<-10) acc.push({...r,type:'drop',reason:`${Math.abs(r.prevRank-r.rank)}위 하락`});
+    else if (!r.prevRank && r.rank<=10) acc.push({...r,type:'new',reason:`신규 ${r.rank}위 진입`});
+    return acc;
+  }, []);
+}
+
+function renderMissingList() {
+  const list = getMissingList();
+  const html = list.length===0
+    ? `<div class="empty-state"><div class="empty-icon">✅</div><div class="empty-title">이탈 없음</div></div>`
+    : list.map(m=>`<div class="missing-card">
+        <div><div class="missing-title">${m.clientName} — ${m.keyword}</div>
+        <div class="missing-sub">${m.reason}${m.rank?` (현재 ${m.rank}위)`:''}</div></div>
+        <span class="badge ${m.type==='new'?'badge-new':m.type==='drop'?'badge-down':'badge-out'}">
+          ${m.type==='new'?'신규진입':m.type==='drop'?'순위하락':'100위이탈'}
+        </span>
+      </div>`).join('');
+  document.getElementById('missing-list').innerHTML = html;
+  document.getElementById('dashboard-missing-list').innerHTML = html;
+}
+
+function renderDashboard() {
+  const recent = Object.values(rankings).sort((a,b)=>new Date(b.checkedAt)-new Date(a.checkedAt)).slice(0,10);
+  if (recent.length===0) return;
+  document.getElementById('dashboard-rank-list').innerHTML =
+    `<table width="100%"><thead><tr><th>업체명</th><th>키워드</th><th>순위</th><th>변동</th></tr></thead><tbody>` +
+    recent.map(r=>`<tr><td><strong>${r.clientName}</strong></td><td>${r.keyword}</td><td>${rankBadge(r.rank)}</td><td>${changeBadge(r.rank,r.prevRank)}</td></tr>`).join('') +
+    '</tbody></table>';
+}
+
+// ===== 빠른 조회 =====
+async function quickCheck() {
+  const url = document.getElementById('q-url').value.trim();
+  const keyword = document.getElementById('q-keyword').value.trim();
+  if (!url||!keyword) return alert('URL과 키워드를 입력해주세요.');
+  if (!settings.clientId||!settings.clientSecret) { alert('API 키 설정 필요'); goPageByName('settings'); return; }
+  document.getElementById('q-icon').textContent = '⏳';
+  const rank = await checkRank(url, keyword);
+  document.getElementById('q-icon').textContent = '🔍';
+  document.getElementById('q-result').style.display = 'block';
+  const el = document.getElementById('q-result-rank');
+  if (!rank) {
+    el.textContent='100위 밖'; el.style.color='var(--text3)'; el.style.fontSize='36px';
+    document.getElementById('q-result-msg').innerHTML='<span class="badge badge-out">⚠️ 미노출</span>';
+  } else {
+    el.textContent=rank+'위'; el.style.fontSize='64px';
+    el.style.color = rank===1?'#ffd700':rank<=3?'var(--warning)':rank<=10?'var(--success)':'var(--text)';
+    const msg = rank<=3?'🏆 상위 노출!':rank<=10?'✅ 1페이지':rank<=20?'📊 2페이지':'📉 확인 필요';
+    document.getElementById('q-result-msg').innerHTML=`<span class="badge badge-new">${msg}</span>`;
+  }
+  document.getElementById('q-result-keyword').textContent = `"${keyword}" 검색 결과`;
+  document.getElementById('q-result-url').textContent = url;
+  window._lastQuick = {url, keyword, rank};
+}
+
+function showMultiArea() { document.getElementById('q-multi-area').style.display='block'; }
+
+async function runMultiCheck() {
+  const url = document.getElementById('q-url').value.trim();
+  const raw = document.getElementById('q-multi-keywords').value.trim();
+  if (!url||!raw) return alert('URL과 키워드를 입력해주세요.');
+  if (!settings.clientId||!settings.clientSecret) return alert('API 키 설정 필요');
+  const keywords = raw.split('\n').map(k=>k.trim()).filter(k=>k);
+  document.getElementById('q-multi-progress').style.display = 'block';
+  document.getElementById('q-multi-icon').textContent = '⏳';
+  const results = [];
+  for (let i=0;i<keywords.length;i++) {
+    document.getElementById('q-multi-progress-text').textContent = `${keywords[i]} (${i+1}/${keywords.length})`;
+    document.getElementById('q-multi-progress-fill').style.width = ((i/keywords.length)*100)+'%';
+    results.push({keyword:keywords[i], rank:await checkRank(url,keywords[i])});
+    await sleep(350);
+  }
+  document.getElementById('q-multi-progress').style.display = 'none';
+  document.getElementById('q-multi-icon').textContent = '🔍';
+  document.getElementById('q-multi-result').style.display = 'block';
+  results.sort((a,b)=>(a.rank||999)-(b.rank||999));
+  document.getElementById('q-multi-result-list').innerHTML = results.map(r=>`<tr>
+    <td>${r.keyword}</td>
+    <td>${rankBadge(r.rank)}</td>
+    <td>${r.rank?(r.rank<=3?'<span class="badge badge-up">🏆 상위노출</span>':r.rank<=10?'<span class="badge badge-new">✅ 1페이지</span>':'<span class="badge badge-same">📊 노출중</span>'):'<span class="badge badge-out">⚠️ 미노출</span>'}</td>
+  </tr>`).join('');
+  window._lastMultiQuick = {url, keywords:results};
+}
+
+function addToClient() {
+  if (!window._lastQuick) return;
+  tempKeywords = [window._lastQuick.keyword];
+  openAddClient();
+  document.getElementById('c-url').value = window._lastQuick.url;
+  setTimeout(()=>renderKwTags(), 50);
+}
+function addMultiToClient() {
+  if (!window._lastMultiQuick) return;
+  tempKeywords = window._lastMultiQuick.keywords.map(k=>k.keyword);
+  openAddClient();
+  document.getElementById('c-url').value = window._lastMultiQuick.url;
+  setTimeout(()=>renderKwTags(), 50);
+}
+
+// ===== 일괄 등록 =====
+function downloadTemplate() {
+  const csv = [
+    ['업체명','블로그URL','키워드1','키워드2','키워드3','키워드4','키워드5'],
+    ['강남피부과','blog.naver.com/sample1','강남피부과','강남레이저토닝','강남보톡스','강남필러','강남리프팅'],
+    ['잠실피부과','blog.naver.com/sample2','잠실피부과','잠실레이저','잠실보톡스','',''],
+  ].map(r=>r.join(',')).join('\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'}));
+  a.download = '클라이언트_등록양식.csv'; a.click();
+}
+
+function handleDrop(e) {
+  e.preventDefault();
+  document.getElementById('drop-zone').style.borderColor = 'var(--border)';
+  if (e.dataTransfer.files[0]) parseCSVFile(e.dataTransfer.files[0]);
+}
+function handleFileUpload(e) { if (e.target.files[0]) parseCSVFile(e.target.files[0]); }
+function parseCSVFile(file) {
+  const reader = new FileReader();
+  reader.onload = e => parseAndPreview(e.target.result.replace(/^\uFEFF/,''), 'bulk');
+  reader.readAsText(file, 'UTF-8');
+}
+function parsePaste() {
+  const text = document.getElementById('bulk-paste').value.trim();
+  if (!text) return alert('데이터를 붙여넣어 주세요.');
+  parseAndPreview(text.split('\n').map(r=>r.split('\t').join(',')).join('\n'), 'paste');
+}
+
+function parseAndPreview(text, mode) {
+  const lines = text.trim().split('\n').filter(l=>l.trim());
+  const first = lines[0].toLowerCase();
+  const start = (first.includes('업체')||first.includes('url')||first.includes('name')) ? 1 : 0;
+  const data = lines.slice(start).map(line => {
+    const cols = line.split(',').map(c=>c.trim().replace(/^"|"$/g,''));
+    if (cols.length<2||!cols[0]||!cols[1]) return null;
+    return {name:cols[0], url:cols[1].replace(/https?:\/\//,''), keywords:cols.slice(2).filter(k=>k)};
+  }).filter(Boolean);
+  if (!data.length) return alert('파싱 실패. 형식을 확인해주세요.');
+  parsedBulkData = data;
+  const bodyId = mode==='bulk'?'bulk-preview-body':'paste-preview-body';
+  const previewId = mode==='bulk'?'bulk-preview':'paste-preview';
+  const msgId = mode==='bulk'?'bulk-parse-msg':'paste-parse-msg';
+  document.getElementById(bodyId).innerHTML = data.map(d=>`<tr>
+    <td><strong>${d.name}</strong></td>
+    <td class="text-accent text-sm">${d.url}</td>
+    <td><span class="badge badge-new">${d.keywords.length}개</span></td>
+    <td class="text-muted text-sm">${d.keywords.slice(0,3).join(', ')}${d.keywords.length>3?'...':''}</td>
+  </tr>`).join('');
+  document.getElementById(msgId).textContent = `✅ ${data.length}개 파싱 완료 — 등록 버튼을 눌러주세요`;
+  document.getElementById(previewId).style.display = 'block';
+}
+
+function confirmImport(mode) {
+  let added=0, updated=0;
+  const existingByUrl = {};
+  Object.entries(clients).forEach(([k,c]) => existingByUrl[c.url]=k);
+  const promises = parsedBulkData.map(d => {
+    if (existingByUrl[d.url]) {
+      const key = existingByUrl[d.url];
+      const merged = [...new Set([...(clients[key].keywords||[]), ...d.keywords])];
+      updated++;
+      return db.ref('clients/'+key+'/keywords').set(merged);
+    } else {
+      const key = db.ref('clients').push().key;
+      added++;
+      return db.ref('clients/'+key).set({name:d.name,url:d.url,keywords:d.keywords,phone:'',email:'',updatedAt:new Date().toISOString()});
+    }
+  });
+  Promise.all(promises).then(() => {
+    alert(`✅ 등록 완료!\n신규: ${added}개 / 업데이트: ${updated}개`);
+    document.getElementById('bulk-preview').style.display = 'none';
+    document.getElementById('paste-preview').style.display = 'none';
+  });
+}
+
+// ===== 키워드 템플릿 =====
+function initTemplateCategories() {
+  const container = document.getElementById('tmpl-categories');
+  if (!container) return;
+  container.innerHTML = Object.keys(CLINIC_CATEGORIES).map(cat=>`
+    <label style="display:flex;align-items:center;gap:8px;padding:10px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);cursor:pointer">
+      <input type="checkbox" value="${cat}" checked style="width:auto;accent-color:var(--accent)">
+      <span style="font-size:13px;font-weight:500">${cat}</span>
+      <span class="text-muted text-sm">(${CLINIC_CATEGORIES[cat].length}개)</span>
+    </label>`).join('');
+}
+
+function generateTemplateKeywords() {
+  const regions = document.getElementById('tmpl-regions').value.split(',').map(r=>r.trim()).filter(r=>r);
+  const style = document.getElementById('tmpl-style').value;
+  const cats = [...document.querySelectorAll('#tmpl-categories input:checked')].map(el=>el.value);
+  if (!regions.length) return alert('지역명을 입력해주세요.');
+  if (!cats.length) return alert('카테고리를 선택해주세요.');
+  const base = cats.flatMap(cat=>CLINIC_CATEGORIES[cat]);
+  const kws = new Set();
+  regions.forEach(r => {
+    kws.add(`${r} 피부과`); kws.add(`${r} 피부과 추천`); kws.add(`${r} 피부과 잘하는곳`);
+    base.forEach(kw => {
+      if (style==='region_first'||style==='both') kws.add(`${r} ${kw}`);
+      if (style==='clinic_first'||style==='both') kws.add(`${r} 피부과 ${kw}`);
+    });
+  });
+  generatedKeywords = [...kws];
+  document.getElementById('tmpl-count').textContent = `생성된 키워드 ${generatedKeywords.length}개`;
+  document.getElementById('tmpl-kw-tags').innerHTML = generatedKeywords.map(kw=>`<span class="kw-tag">${kw}</span>`).join('');
+  document.getElementById('tmpl-result').style.display = 'block';
+}
+
+function copyTemplateKeywords() {
+  navigator.clipboard.writeText(generatedKeywords.join('\n'));
+  alert(`${generatedKeywords.length}개 복사됐습니다!`);
+}
+
+function applyTemplateToAll() {
+  if (!Object.keys(clients).length) return alert('클라이언트가 없습니다.');
+  if (!generatedKeywords.length) return alert('키워드를 먼저 생성해주세요.');
+  if (!confirm(`전체 ${Object.keys(clients).length}개 클라이언트에 ${generatedKeywords.length}개 키워드 추가?`)) return;
+  const promises = Object.entries(clients).map(([key,c]) => {
+    const merged = [...new Set([...(c.keywords||[]), ...generatedKeywords])];
+    return db.ref('clients/'+key+'/keywords').set(merged);
+  });
+  Promise.all(promises).then(() => alert('✅ 전체 적용 완료!'));
+}
+
+function applyTemplateToClient() {
+  const key = document.getElementById('tmpl-target-client').value;
+  if (!key) return alert('클라이언트를 선택해주세요.');
+  if (!generatedKeywords.length) return alert('키워드를 먼저 생성해주세요.');
+  const c = clients[key];
+  const merged = [...new Set([...(c.keywords||[]), ...generatedKeywords])];
+  db.ref('clients/'+key+'/keywords').set(merged).then(() =>
+    alert(`✅ "${c.name}"에 적용 완료! (총 ${merged.length}개)`)
+  );
+}
+
+// ===== 보고서 =====
+function generateReport() {
+  const clientVal = document.getElementById('report-client').value;
+  const type = document.getElementById('report-type').value;
+  const today = new Date().toLocaleDateString('ko-KR',{year:'numeric',month:'long',day:'numeric'});
+  let content = `📊 블로그 순위 보고서\n${today} (${type==='daily'?'일간':'주간'})\n${'='.repeat(40)}\n\n`;
+  const targets = clientVal ? [[clientVal, clients[clientVal]]] : Object.entries(clients);
+  targets.forEach(([key,c]) => {
+    const cRankings = Object.values(rankings).filter(r=>r.clientKey===key);
+    content += `▶ ${c.name}\n`;
+    if (!cRankings.length) { content += '  (순위 데이터 없음)\n\n'; return; }
+    cRankings.sort((a,b)=>(a.rank||999)-(b.rank||999)).forEach(r => {
+      const change = r.prevRank?(r.rank?(r.prevRank>r.rank?` ▲${r.prevRank-r.rank}`:r.prevRank<r.rank?` ▼${r.rank-r.prevRank}`:' —'):''):'(신규)';
+      content += `  • ${r.keyword.padEnd(20)} ${r.rank?r.rank+'위'+change:'100위 밖 ⚠️'}\n`;
+    });
+    content += '\n';
+  });
+  document.getElementById('report-content').textContent = content;
+  document.getElementById('report-area').style.display = 'block';
+}
+
+function copyReport() { navigator.clipboard.writeText(document.getElementById('report-content').textContent).then(()=>alert('복사됐습니다!')); }
+function sendKakao() { navigator.clipboard.writeText(document.getElementById('report-content').textContent); window.open('https://open.kakao.com/','_blank'); alert('보고서가 복사됐습니다.\n카카오톡에 붙여넣기 해주세요.'); }
+function sendEmail() {
+  const text = document.getElementById('report-content').textContent;
+  window.open(`mailto:?subject=${encodeURIComponent('블로그 순위 보고서')}&body=${encodeURIComponent(text)}`);
+}
+
+// ===== 설정 =====
+function saveSettings() {
+  settings = {
+    clientId: document.getElementById('set-client-id').value.trim(),
+    clientSecret: document.getElementById('set-client-secret').value.trim(),
+    rankDepth: parseInt(document.getElementById('set-rank-depth').value),
+    missingThreshold: parseInt(document.getElementById('set-missing-threshold').value)
+  };
+  db.ref('settings').set(settings).then(() => {
+    document.getElementById('api-warning').style.display = settings.clientId ? 'none' : 'flex';
+    alert('저장됐습니다!');
+  });
+}
+
+async function testApi() {
+  const id = document.getElementById('set-client-id').value.trim();
+  const secret = document.getElementById('set-client-secret').value.trim();
+  if (!id||!secret) return alert('ID와 Secret을 입력해주세요.');
+  const result = document.getElementById('api-test-result');
+  result.style.display = 'block';
+  result.innerHTML = '<div class="alert alert-info"><span class="spinner"></span> 테스트 중...</div>';
+  try {
+    const res = await fetch('https://openapi.naver.com/v1/search/blog?query=테스트&display=1',
+      {headers:{'X-Naver-Client-Id':id,'X-Naver-Client-Secret':secret}});
+    result.innerHTML = res.ok
+      ? '<div class="alert alert-success">✅ API 연결 성공!</div>'
+      : `<div class="alert alert-danger">❌ 오류 (${res.status}): API 키를 확인해주세요</div>`;
+  } catch(e) {
+    result.innerHTML = '<div class="alert alert-danger">❌ CORS 오류 — 브라우저 직접 호출이 차단됩니다. 프록시 서버가 필요합니다.</div>';
+  }
+}
+
+function clearRankData() {
+  if (!confirm('순위 데이터를 모두 삭제?')) return;
+  db.ref('rankings').remove().then(()=>alert('삭제됐습니다.'));
+}
+function clearAll() {
+  if (!confirm('모든 데이터를 삭제? 복구 불가')) return;
+  Promise.all([db.ref('clients').remove(), db.ref('rankings').remove()]).then(()=>alert('초기화됐습니다.'));
+}
+
+// ===== 셀렉트 업데이트 =====
+function updateAllSelects() {
+  const opts = Object.entries(clients).map(([k,c])=>`<option value="${k}">${c.name}</option>`).join('');
+  ['report-client','rank-client-filter'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.innerHTML = '<option value="">전체</option>' + opts;
+  });
+  const tmpl = document.getElementById('tmpl-target-client');
+  if (tmpl) tmpl.innerHTML = '<option value="">선택...</option>' + opts;
+}
+</script>
+</body>
+</html>
