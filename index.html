@@ -1486,26 +1486,28 @@ function generateReport() {
 
     if (!rankedKws.length) return;
 
-    // 순위별 집계
-    let r1=0,r2=0,r3=0,r4=0,r5=0,r6_15=0;
+    // 블로그 노출 건수 기준 집계 (키워드당 여러 블로그 각각 카운팅)
+    let r1=0,r2=0,r3=0,r4=0,r5=0,r6_15=0, total=0;
     rankedKws.forEach(kw=>{
       const d = byKw[kw]||{blog:[],cafe:[]};
-      const ranks = [...d.blog,...d.cafe].map(r=>r.rank).filter(r=>r);
-      const best = Math.min(...ranks);
-      if (best===1) r1++;
-      else if (best===2) r2++;
-      else if (best===3) r3++;
-      else if (best===4) r4++;
-      else if (best===5) r5++;
-      else if (best<=15) r6_15++;
+      [...d.blog,...d.cafe].forEach(r=>{
+        if (!r.rank) return;
+        total++;
+        if (r.rank===1) r1++;
+        else if (r.rank===2) r2++;
+        else if (r.rank===3) r3++;
+        else if (r.rank===4) r4++;
+        else if (r.rank===5) r5++;
+        else if (r.rank<=15) r6_15++;
+      });
     });
 
     content += `▶ ${b.name}\n`;
     content += `${'─'.repeat(40)}\n`;
-    content += `📊 순위 요약\n`;
+    content += `📊 순위 요약 (블로그 노출 건수 기준)\n`;
     content += `  1위: ${r1}개  2위: ${r2}개  3위: ${r3}개\n`;
     content += `  4위: ${r4}개  5위: ${r5}개  6~15위: ${r6_15}개\n`;
-    content += `  ✅ 총 ${rankedKws.length}개 노출 중\n`;
+    content += `  ✅ 총 ${total}개 노출 중\n`;
     content += `${'─'.repeat(40)}\n\n`;
 
     // 정렬
