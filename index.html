@@ -201,6 +201,9 @@ tr:hover td{background:var(--surface2);}
       <span class="nav-icon">📋</span> 보고서 발송
     </div>
     <div class="nav-section">설정</div>
+    <div class="nav-item" data-page="backup" onclick="goPage(this)">
+      <span class="nav-icon">💾</span> 백업/복원
+    </div>
     <div class="nav-item" data-page="settings" onclick="goPage(this)">
       <span class="nav-icon">⚙️</span> 설정
     </div>
@@ -556,6 +559,83 @@ tr:hover td{background:var(--surface2);}
       </div>
     </div>
 
+    <!-- ===== 백업/복원 ===== -->
+    <div id="page-backup" class="page">
+      <div class="page-header">
+        <div>
+          <div class="page-title">💾 백업 / 복원</div>
+          <div class="page-sub">데이터를 엑셀로 백업하고 복원합니다</div>
+        </div>
+        <button class="btn btn-primary" onclick="backupAll()">⬇️ 전체 백업 (Excel)</button>
+      </div>
+
+      <!-- 백업 옵션 -->
+      <div class="stat-grid" style="grid-template-columns:repeat(3,1fr)">
+        <div class="stat-card" style="cursor:pointer" onclick="backupClients()">
+          <div class="stat-label">클라이언트 목록</div>
+          <div class="stat-value text-accent" id="backup-client-count">0</div>
+          <div class="stat-change mt-8">
+            <button class="btn btn-secondary btn-sm" style="width:100%">📥 CSV 다운로드</button>
+          </div>
+        </div>
+        <div class="stat-card" style="cursor:pointer" onclick="backupRankings()">
+          <div class="stat-label">순위 데이터</div>
+          <div class="stat-value text-success" id="backup-rank-count">0</div>
+          <div class="stat-change mt-8">
+            <button class="btn btn-secondary btn-sm" style="width:100%">📥 CSV 다운로드</button>
+          </div>
+        </div>
+        <div class="stat-card" style="cursor:pointer" onclick="backupAll()">
+          <div class="stat-label">전체 통합 백업</div>
+          <div class="stat-value">📦</div>
+          <div class="stat-change mt-8">
+            <button class="btn btn-primary btn-sm" style="width:100%">📥 Excel 다운로드</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 백업 이력 -->
+      <div class="card">
+        <div class="card-title">백업 이력</div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>날짜/시간</th><th>백업 유형</th><th>클라이언트 수</th><th>순위 데이터 수</th><th>작업</th></tr></thead>
+            <tbody id="backup-history-list"></tbody>
+          </table>
+        </div>
+        <div id="backup-history-empty" class="empty-state">
+          <div class="empty-icon">📭</div>
+          <div class="empty-title">백업 이력 없음</div>
+          <div class="empty-sub">상단 버튼으로 첫 백업을 만들어보세요</div>
+        </div>
+      </div>
+
+      <!-- 복원 -->
+      <div class="card">
+        <div class="card-title">🔄 데이터 복원</div>
+        <div class="alert alert-warning" style="margin-bottom:16px">
+          ⚠️ 복원 시 현재 데이터에 병합됩니다. 기존 데이터는 덮어쓰지 않습니다.
+        </div>
+        <div id="restore-drop-zone" style="border:2px dashed var(--border);border-radius:var(--radius);padding:32px;text-align:center;cursor:pointer;transition:all .2s"
+          onclick="document.getElementById('restore-file').click()"
+          ondragover="event.preventDefault();this.style.borderColor='var(--accent)'"
+          ondragleave="this.style.borderColor='var(--border)'"
+          ondrop="handleRestoreDrop(event)">
+          <div style="font-size:28px;margin-bottom:8px">📂</div>
+          <div style="font-weight:600;margin-bottom:4px">백업 CSV 파일을 드래그하거나 클릭</div>
+          <div class="text-muted text-sm">이전에 다운로드한 백업 파일</div>
+        </div>
+        <input type="file" id="restore-file" accept=".csv,.json" style="display:none" onchange="handleRestoreFile(event)">
+        <div id="restore-preview" style="display:none;margin-top:16px">
+          <div class="alert alert-success" id="restore-msg"></div>
+          <div class="flex gap-8">
+            <button class="btn btn-primary" onclick="confirmRestore()">✅ 복원 실행</button>
+            <button class="btn btn-secondary" onclick="document.getElementById('restore-preview').style.display='none'">취소</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- ===== 설정 ===== -->
     <div id="page-settings" class="page">
       <div class="page-header">
@@ -577,6 +657,8 @@ tr:hover td{background:var(--surface2);}
         <div style="padding:14px 0;border-bottom:1px solid var(--border)">
           <div class="form-label">순위 체크 범위</div>
           <select id="set-rank-depth" style="max-width:180px;margin-top:6px">
+            <option value="10">10위까지</option>
+            <option value="15">15위까지</option>
             <option value="30">30위까지</option>
             <option value="50" selected>50위까지</option>
             <option value="100">100위까지</option>
@@ -769,6 +851,7 @@ function initApp() {
   });
 
   initTemplateCategories();
+  loadBackupHistory();
 }
 
 // 세션 체크 (이미 로그인된 경우)
@@ -1351,7 +1434,169 @@ function updateAllSelects() {
   });
   const tmpl = document.getElementById('tmpl-target-client');
   if (tmpl) tmpl.innerHTML = '<option value="">선택...</option>' + opts;
+  // 백업 통계 업데이트
+  const bc = document.getElementById('backup-client-count');
+  const br = document.getElementById('backup-rank-count');
+  if (bc) bc.textContent = Object.keys(clients).length;
+  if (br) br.textContent = Object.keys(rankings).length;
 }
+
+// ===== 백업/복원 =====
+let restoreData = null;
+
+function csvDownload(filename, rows) {
+  const csv = '\uFEFF' + rows.map(r =>
+    r.map(v => (typeof v === 'string' && v.includes(',')) ? `"${v}"` : v).join(',')
+  ).join('\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv], {type:'text/csv;charset=utf-8'}));
+  a.download = filename; a.click();
+}
+
+function backupClients() {
+  const cList = Object.entries(clients);
+  if (!cList.length) return alert('백업할 클라이언트가 없습니다.');
+  const rows = [['업체명','블로그URL','연락처','이메일','키워드목록','등록일']];
+  cList.forEach(([,c]) => {
+    rows.push([c.name, c.url, c.phone||'', c.email||'', (c.keywords||[]).join('|'), c.updatedAt||'']);
+  });
+  const today = new Date().toLocaleDateString('ko-KR').replace(/\./g,'').replace(/ /g,'');
+  csvDownload(`클라이언트_백업_${today}.csv`, rows);
+  saveBackupHistory('클라이언트 목록', cList.length, 0);
+}
+
+function backupRankings() {
+  const rList = Object.entries(rankings);
+  if (!rList.length) return alert('백업할 순위 데이터가 없습니다.');
+  const rows = [['업체명','블로그URL','키워드','현재순위','이전순위','체크일시']];
+  rList.forEach(([,r]) => {
+    rows.push([r.clientName, r.url, r.keyword, r.rank||'100위밖', r.prevRank||'-', r.checkedAt||'']);
+  });
+  const today = new Date().toLocaleDateString('ko-KR').replace(/\./g,'').replace(/ /g,'');
+  csvDownload(`순위데이터_백업_${today}.csv`, rows);
+  saveBackupHistory('순위 데이터', 0, rList.length);
+}
+
+function backupAll() {
+  const cList = Object.entries(clients);
+  const rList = Object.entries(rankings);
+  if (!cList.length && !rList.length) return alert('백업할 데이터가 없습니다.');
+
+  // 클라이언트 시트
+  const clientRows = [['[클라이언트 목록]'], ['업체명','블로그URL','연락처','이메일','키워드목록','등록일']];
+  cList.forEach(([,c]) => {
+    clientRows.push([c.name, c.url, c.phone||'', c.email||'', (c.keywords||[]).join('|'), c.updatedAt||'']);
+  });
+
+  // 구분선
+  clientRows.push([]);
+  clientRows.push(['[순위 데이터]']);
+  clientRows.push(['업체명','블로그URL','키워드','현재순위','이전순위','체크일시']);
+  rList.forEach(([,r]) => {
+    clientRows.push([r.clientName, r.url, r.keyword, r.rank||'100위밖', r.prevRank||'-', r.checkedAt||'']);
+  });
+
+  const today = new Date().toLocaleDateString('ko-KR').replace(/\./g,'').replace(/ /g,'');
+  csvDownload(`랭크매니저_전체백업_${today}.csv`, clientRows);
+  saveBackupHistory('전체 통합', cList.length, rList.length);
+}
+
+function saveBackupHistory(type, clientCnt, rankCnt) {
+  const key = db.ref('backupHistory').push().key;
+  db.ref('backupHistory/'+key).set({
+    type, clientCnt, rankCnt, createdAt: new Date().toISOString()
+  }).then(() => loadBackupHistory());
+}
+
+function loadBackupHistory() {
+  db.ref('backupHistory').orderByChild('createdAt').limitToLast(20).once('value').then(snap => {
+    const data = snap.val() || {};
+    const list = Object.entries(data).sort((a,b) => b[1].createdAt.localeCompare(a[1].createdAt));
+    const tbody = document.getElementById('backup-history-list');
+    const empty = document.getElementById('backup-history-empty');
+    if (!list.length) { tbody.innerHTML=''; empty.style.display='block'; return; }
+    empty.style.display = 'none';
+    tbody.innerHTML = list.map(([key,h]) => `<tr>
+      <td>${new Date(h.createdAt).toLocaleString('ko-KR',{year:'numeric',month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})}</td>
+      <td><span class="badge badge-new">${h.type}</span></td>
+      <td>${h.clientCnt ? h.clientCnt+'개' : '-'}</td>
+      <td>${h.rankCnt ? h.rankCnt+'건' : '-'}</td>
+      <td><button class="btn btn-danger" onclick="deleteBackupHistory('${key}')">삭제</button></td>
+    </tr>`).join('');
+  });
+}
+
+function deleteBackupHistory(key) {
+  if (!confirm('이력을 삭제하시겠습니까?')) return;
+  db.ref('backupHistory/'+key).remove().then(() => loadBackupHistory());
+}
+
+// 복원
+function handleRestoreDrop(e) {
+  e.preventDefault();
+  document.getElementById('restore-drop-zone').style.borderColor = 'var(--border)';
+  if (e.dataTransfer.files[0]) parseRestoreFile(e.dataTransfer.files[0]);
+}
+function handleRestoreFile(e) { if (e.target.files[0]) parseRestoreFile(e.target.files[0]); }
+
+function parseRestoreFile(file) {
+  const reader = new FileReader();
+  reader.onload = e => {
+    const text = e.target.result.replace(/^\uFEFF/,'');
+    const lines = text.trim().split('\n').filter(l=>l.trim());
+    // 클라이언트 섹션만 파싱
+    let inClients = false;
+    const data = [];
+    lines.forEach(line => {
+      if (line.includes('[클라이언트 목록]')) { inClients = true; return; }
+      if (line.includes('[순위 데이터]')) { inClients = false; return; }
+      if (!inClients) return;
+      const cols = line.split(',').map(c=>c.trim().replace(/^"|"$/g,''));
+      if (cols[0]==='업체명'||!cols[0]||!cols[1]) return;
+      data.push({
+        name:cols[0], url:cols[1], phone:cols[2]||'', email:cols[3]||'',
+        keywords: cols[4] ? cols[4].split('|').filter(k=>k) : [],
+        updatedAt: cols[5]||new Date().toISOString()
+      });
+    });
+    if (!data.length) {
+      // 단순 클라이언트 CSV로 시도
+      lines.forEach(line => {
+        const cols = line.split(',').map(c=>c.trim().replace(/^"|"$/g,''));
+        if (cols[0]==='업체명'||!cols[0]||!cols[1]) return;
+        data.push({
+          name:cols[0], url:cols[1], phone:cols[2]||'', email:cols[3]||'',
+          keywords: cols.slice(4).filter(k=>k&&k!=='-'),
+          updatedAt: new Date().toISOString()
+        });
+      });
+    }
+    if (!data.length) return alert('파일 형식이 올바르지 않습니다. 백업 파일을 사용해주세요.');
+    restoreData = data;
+    document.getElementById('restore-msg').textContent = `✅ ${data.length}개 클라이언트 발견 — 복원 실행 버튼을 눌러주세요`;
+    document.getElementById('restore-preview').style.display = 'block';
+  };
+  reader.readAsText(file, 'UTF-8');
+}
+
+function confirmRestore() {
+  if (!restoreData||!restoreData.length) return;
+  const existingByUrl = {};
+  Object.entries(clients).forEach(([k,c]) => existingByUrl[c.url]=k);
+  let added=0, skipped=0;
+  const promises = restoreData.map(d => {
+    if (existingByUrl[d.url]) { skipped++; return Promise.resolve(); }
+    added++;
+    const key = db.ref('clients').push().key;
+    return db.ref('clients/'+key).set(d);
+  });
+  Promise.all(promises).then(() => {
+    alert(`✅ 복원 완료!\n신규 추가: ${added}개 / 중복 건너뜀: ${skipped}개`);
+    document.getElementById('restore-preview').style.display = 'none';
+    restoreData = null;
+  });
+}
+
 </script>
 </body>
 </html>
