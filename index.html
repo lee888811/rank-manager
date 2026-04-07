@@ -913,21 +913,122 @@ function renderBranchList() {
           <div style="display:flex;align-items:center;gap:8px">
             <span style="font-size:12px;font-weight:600;color:var(--text2)">키워드</span>
             <span class="badge badge-new">${kws.length}개</span>
+            ${(() => { const dupes = kws.filter((k,i)=>kws.indexOf(k)!==i); return dupes.length ? `<span class="badge badge-down">중복 ${[...new Set(dupes)].length}개</span>` : ''; })()}
           </div>
           <div style="display:flex;align-items:center;gap:8px">
-            <input type="text" placeholder="검색..." onclick="event.stopPropagation()" oninput="filterSection('kw-${key}',this.value)"
+            <input type="text" placeholder="검색..." onclick="event.stopPropagation()" oninput="filterKwTable('${key}',this.value)"
               style="width:120px;padding:4px 8px;font-size:12px;height:28px">
+            <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();removeDuplicateKws('${key}')">중복 제거</button>
             <span id="toggle-kw-${key}" style="color:var(--text3);font-size:12px">▼ 펼치기</span>
           </div>
         </div>
-        <div id="kw-${key}" style="display:none;padding:12px 14px">
-          <div style="display:flex;flex-wrap:wrap;gap:6px" id="kw-list-${key}">
-            ${kws.map(kw=>`<span class="kw-tag" data-val="${kw}">${kw}</span>`).join('')}
+        <div id="kw-${key}" style="display:none">
+          <div style="padding:10px 14px;border-bottom:1px solid var(--border);display:flex;gap:8px">
+            <input type="text" id="kw-add-input-${key}" placeholder="새 키워드 입력" style="flex:1;padding:6px 10px;font-size:13px"
+              onkeydown="if(event.key==='Enter')addSingleKw('${key}')">
+            <button class="btn btn-primary btn-sm" onclick="addSingleKw('${key}')">+ 추가</button>
+          </div>
+          <div style="max-height:400px;overflow-y:auto">
+            <table style="width:100%;border-collapse:collapse;font-size:13px" id="kw-table-${key}">
+              <thead style="position:sticky;top:0;z-index:1">
+                <tr style="background:var(--surface2)">
+                  <th style="padding:8px 12px;text-align:left;width:50px;color:var(--text2)">#</th>
+                  <th style="padding:8px 12px;text-align:left;color:var(--text2)">키워드</th>
+                  <th style="padding:8px 12px;text-align:center;width:60px;color:var(--text2)">중복</th>
+                  <th style="padding:8px 12px;text-align:center;width:120px;color:var(--text2)">작업</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${kws.map((kw, idx) => {
+                  const isDupe = kws.indexOf(kw) !== idx;
+                  const dupeCount = kws.filter(k=>k===kw).length;
+                  return `<tr id="kw-row-${key}-${idx}" style="${isDupe?'background:rgba(247,79,79,0.05)':''}${idx%2===0&&!isDupe?'':''}">
+                    <td style="padding:6px 12px;color:var(--text3)">${idx+1}</td>
+                    <td style="padding:6px 12px">
+                      <span id="kw-text-${key}-${idx}">${kw}</span>
+                      <input id="kw-edit-${key}-${idx}" value="${kw.replace(/"/g,'&quot;')}" style="display:none;width:90%;padding:2px 6px;font-size:13px"
+                        onkeydown="if(event.key==='Enter')saveKwEdit('${key}',${idx});if(event.key==='Escape')cancelKwEdit('${key}',${idx})">
+                    </td>
+                    <td style="padding:6px 12px;text-align:center">${dupeCount>1?`<span style="color:var(--danger);font-size:11px">×${dupeCount}</span>`:''}</td>
+                    <td style="padding:6px 12px;text-align:center">
+                      <div style="display:flex;gap:4px;justify-content:center">
+                        <button class="btn btn-secondary btn-sm" style="padding:2px 8px;font-size:11px" id="kw-edit-btn-${key}-${idx}"
+                          onclick="startKwEdit('${key}',${idx})">수정</button>
+                        <button class="btn btn-danger btn-sm" style="padding:2px 8px;font-size:11px"
+                          onclick="deleteKw('${key}',${idx})">삭제</button>
+                      </div>
+                    </td>
+                  </tr>`;
+                }).join('')}
+              </tbody>
+            </table>
           </div>
         </div>
       </div>
     </div>`;
   }).join('');
+}
+
+// ===== 키워드 테이블 편집 =====
+function filterKwTable(bKey, query) {
+  const q = query.toLowerCase();
+  const rows = document.querySelectorAll(`#kw-table-${bKey} tbody tr`);
+  rows.forEach(row => {
+    const text = row.querySelector('span')?.textContent || '';
+    row.style.display = text.toLowerCase().includes(q) ? '' : 'none';
+  });
+}
+
+function startKwEdit(bKey, idx) {
+  document.getElementById(`kw-text-${bKey}-${idx}`).style.display = 'none';
+  document.getElementById(`kw-edit-${bKey}-${idx}`).style.display = 'inline-block';
+  const btn = document.getElementById(`kw-edit-btn-${bKey}-${idx}`);
+  btn.textContent = '저장';
+  btn.onclick = () => saveKwEdit(bKey, idx);
+  document.getElementById(`kw-edit-${bKey}-${idx}`).focus();
+}
+
+function cancelKwEdit(bKey, idx) {
+  document.getElementById(`kw-text-${bKey}-${idx}`).style.display = '';
+  document.getElementById(`kw-edit-${bKey}-${idx}`).style.display = 'none';
+  const btn = document.getElementById(`kw-edit-btn-${bKey}-${idx}`);
+  btn.textContent = '수정';
+  btn.onclick = () => startKwEdit(bKey, idx);
+}
+
+function saveKwEdit(bKey, idx) {
+  const newVal = document.getElementById(`kw-edit-${bKey}-${idx}`).value.trim();
+  if (!newVal) return alert('키워드를 입력해주세요.');
+  const kws = [...(branches[bKey].keywords || [])];
+  kws[idx] = newVal;
+  db.ref(`branches/${bKey}/keywords`).set(kws).then(() => alert('✅ 수정됐습니다!'));
+}
+
+function deleteKw(bKey, idx) {
+  const kws = [...(branches[bKey].keywords || [])];
+  const kw = kws[idx];
+  if (!confirm(`"${kw}" 을(를) 삭제합니까?`)) return;
+  kws.splice(idx, 1);
+  db.ref(`branches/${bKey}/keywords`).set(kws);
+}
+
+function addSingleKw(bKey) {
+  const input = document.getElementById(`kw-add-input-${bKey}`);
+  const val = input.value.trim();
+  if (!val) return alert('키워드를 입력해주세요.');
+  const kws = [...(branches[bKey].keywords || [])];
+  if (kws.includes(val)) return alert('이미 등록된 키워드입니다.');
+  kws.push(val);
+  db.ref(`branches/${bKey}/keywords`).set(kws).then(() => { input.value = ''; });
+}
+
+function removeDuplicateKws(bKey) {
+  const kws = branches[bKey].keywords || [];
+  const unique = [...new Set(kws)];
+  const removed = kws.length - unique.length;
+  if (removed === 0) return alert('중복 키워드가 없습니다.');
+  if (!confirm(`중복 키워드 ${removed}개를 제거합니까?`)) return;
+  db.ref(`branches/${bKey}/keywords`).set(unique).then(() => alert(`✅ ${removed}개 중복 제거됐습니다!`));
 }
 
 function toggleSection(id) {
