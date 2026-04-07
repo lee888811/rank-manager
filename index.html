@@ -119,6 +119,47 @@ tr:hover td{background:var(--surface2);}
 ::-webkit-scrollbar{width:6px;height:6px;}
 ::-webkit-scrollbar-track{background:transparent;}
 ::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px;}
+/* 모바일 반응형 */
+@media (max-width: 768px) {
+  .sidebar { display:none; }
+  .main { margin-left:0; padding:16px; max-width:100vw; }
+  .stat-grid { grid-template-columns:repeat(2,1fr) !important; gap:10px; }
+  .form-row.col2 { grid-template-columns:1fr !important; }
+  .page-header { flex-direction:column; align-items:flex-start; gap:10px; }
+  .table-wrap { overflow-x:auto; }
+  table { min-width:600px; }
+  #branch-dashboard { grid-template-columns:1fr !important; }
+  .flex-between { flex-direction:column; gap:8px; align-items:flex-start; }
+  .mobile-nav { display:flex !important; }
+  .report-preview { font-size:11px; }
+}
+/* 모바일 하단 탭바 */
+.mobile-nav {
+  display:none;
+  position:fixed;
+  bottom:0; left:0; right:0;
+  background:var(--surface);
+  border-top:1px solid var(--border);
+  z-index:200;
+  padding:6px 0 env(safe-area-inset-bottom);
+  overflow-x:auto;
+  white-space:nowrap;
+}
+.mobile-nav-item {
+  display:inline-flex;
+  flex-direction:column;
+  align-items:center;
+  padding:6px 12px;
+  cursor:pointer;
+  color:var(--text2);
+  font-size:10px;
+  min-width:56px;
+}
+.mobile-nav-item.active { color:var(--accent); }
+.mobile-nav-item .mn-icon { font-size:20px; margin-bottom:2px; }
+@media (max-width:768px) {
+  .layout { padding-bottom:60px; }
+}
 </style>
 </head>
 <body>
@@ -159,6 +200,18 @@ tr:hover td{background:var(--surface2);}
     <div class="nav-item" data-page="settings" onclick="goPage(this)"><span class="nav-icon">⚙️</span> 설정</div>
     <div class="nav-item" onclick="doLogout()" style="margin-top:8px"><span class="nav-icon">🚪</span> 로그아웃</div>
   </aside>
+
+  <!-- 모바일 하단 탭바 -->
+  <nav class="mobile-nav" id="mobile-nav">
+    <div class="mobile-nav-item active" data-page="dashboard" onclick="goPageMobile(this)"><div class="mn-icon">🏠</div>홈</div>
+    <div class="mobile-nav-item" data-page="ranking" onclick="goPageMobile(this)"><div class="mn-icon">📈</div>순위</div>
+    <div class="mobile-nav-item" data-page="missing" onclick="goPageMobile(this)"><div class="mn-icon">🚨</div>누락</div>
+    <div class="mobile-nav-item" data-page="report" onclick="goPageMobile(this)"><div class="mn-icon">📋</div>보고서</div>
+    <div class="mobile-nav-item" data-page="accounts" onclick="goPageMobile(this)"><div class="mn-icon">👤</div>아이디</div>
+    <div class="mobile-nav-item" data-page="branches" onclick="goPageMobile(this)"><div class="mn-icon">🏥</div>지점</div>
+    <div class="mobile-nav-item" data-page="internal" onclick="goPageMobile(this)"><div class="mn-icon">🔍</div>내부</div>
+    <div class="mobile-nav-item" data-page="settings" onclick="goPageMobile(this)"><div class="mn-icon">⚙️</div>설정</div>
+  </nav>
 
   <main class="main">
 
@@ -682,6 +735,20 @@ if (sessionStorage.getItem('rm_auth')) {
     document.getElementById('app').style.display='block';
     initApp();
   });
+}
+
+function goPageMobile(el) {
+  const page = el.dataset.page;
+  document.querySelectorAll('.mobile-nav-item').forEach(n=>n.classList.remove('active'));
+  el.classList.add('active');
+  // 사이드바 nav-item도 동기화
+  document.querySelectorAll('.nav-item').forEach(n=>{
+    n.classList.toggle('active', n.dataset.page===page);
+  });
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  const target = document.getElementById('page-'+page);
+  if (target) target.classList.add('active');
+  window.scrollTo(0,0);
 }
 
 function goPage(el) {
@@ -1394,7 +1461,7 @@ function generateReport() {
       const cafeSorted = tabs.cafe.filter(r=>r.rank).sort((a,b)=>a.rank-b.rank);
       content += `  ${String(idx+1).padStart(3)}. ${kw}\n`;
       content += `       [블로그] ${blogSorted.length?blogSorted.map(r=>`${r.rank}위`).join(' / '):'-'}\n`;
-      if (cafeSorted.length) content += `       [카페]   ${cafeSorted.map(r=>`${r.rank}위`).join(' / ')}\n`;
+      content += `       [카페]   ${cafeSorted.length?cafeSorted.map(r=>`${r.rank}위`).join(' / '):'-'}\n`;
     });
     content += '\n';
   });
