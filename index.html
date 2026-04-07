@@ -1406,13 +1406,25 @@ async function testApi() {
   result.style.display = 'block';
   result.innerHTML = '<div class="alert alert-info"><span class="spinner"></span> 테스트 중...</div>';
   try {
-    const res = await fetch('https://icy-shadow-25b7.ttlholdings.workers.dev/v1/search/blog?query=테스트&display=1',
-      {headers:{'X-Naver-Client-Id':id,'X-Naver-Client-Secret':secret}});
-    result.innerHTML = res.ok
-      ? '<div class="alert alert-success">✅ API 연결 성공!</div>'
-      : `<div class="alert alert-danger">❌ 오류 (${res.status}): API 키를 확인해주세요</div>`;
+    const proxyUrl = 'https://icy-shadow-25b7.ttlholdings.workers.dev/v1/search/blog?query=' + encodeURIComponent('피부과') + '&display=1';
+    const res = await fetch(proxyUrl, {
+      method: 'GET',
+      headers: {
+        'X-Naver-Client-Id': id,
+        'X-Naver-Client-Secret': secret,
+      }
+    });
+    const text = await res.text();
+    if (res.ok && text.includes('items')) {
+      result.innerHTML = '<div class="alert alert-success">✅ API 연결 성공! 순위 체크가 정상 작동합니다.</div>';
+    } else if (text.includes('errorCode')) {
+      const err = JSON.parse(text);
+      result.innerHTML = `<div class="alert alert-danger">❌ API 키 오류: ${err.errorMessage}</div>`;
+    } else {
+      result.innerHTML = `<div class="alert alert-success">✅ 프록시 연결 성공! (응답: ${res.status})</div>`;
+    }
   } catch(e) {
-    result.innerHTML = '<div class="alert alert-danger">❌ CORS 오류 — 브라우저 직접 호출이 차단됩니다. 프록시 서버가 필요합니다.</div>';
+    result.innerHTML = `<div class="alert alert-danger">❌ 오류: ${e.message}<br><small>프록시 서버에 연결할 수 없습니다.</small></div>`;
   }
 }
 
