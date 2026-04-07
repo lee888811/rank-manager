@@ -383,6 +383,13 @@ tr:hover td{background:var(--surface2);}
             <option value="주의">⚠️ 주의</option>
             <option value="문제">❌ 문제</option>
           </select>
+          <select id="acc-sort" style="max-width:140px" onchange="renderAccountList()">
+            <option value="id">아이디순</option>
+            <option value="staff">담당순</option>
+            <option value="posts">병원글 많은순</option>
+            <option value="posts_asc">병원글 적은순</option>
+            <option value="status">상태순</option>
+          </select>
         </div>
       </div>
       <!-- 통계 -->
@@ -1246,7 +1253,18 @@ function renderAccountList() {
   if (q) list = list.filter(([,a]) => a.id?.toLowerCase().includes(q));
   if (staff) list = list.filter(([,a]) => a.staff === staff);
   if (status) list = list.filter(([,a]) => a.status === status);
-  list.sort(([,a],[,b]) => (a.id||'').localeCompare(b.id||'', 'ko'));
+  const sort = document.getElementById('acc-sort')?.value || 'id';
+  list.sort(([,a],[,b]) => {
+    if (sort==='id') return (a.id||'').localeCompare(b.id||'', 'ko');
+    if (sort==='staff') return (a.staff||'').localeCompare(b.staff||'', 'ko');
+    if (sort==='posts') return (b.postCnt||0)-(a.postCnt||0);
+    if (sort==='posts_asc') return (a.postCnt||0)-(b.postCnt||0);
+    if (sort==='status') {
+      const order={정상:0,주의:1,문제:2};
+      return (order[a.status]||0)-(order[b.status]||0);
+    }
+    return 0;
+  });
   if (!list.length) { tbody.innerHTML = ''; empty.style.display = 'block'; return; }
   empty.style.display = 'none';
   tbody.innerHTML = list.map(([key, a]) => {
