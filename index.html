@@ -194,7 +194,8 @@ tr:hover td{background:var(--surface2);}
     <div class="nav-item" data-page="alarm" onclick="goPage(this)"><span class="nav-icon">🔔</span> 누락 알람</div>
     <div class="nav-section">자동화</div>
     <div class="nav-item" data-page="report" onclick="goPage(this)"><span class="nav-icon">📋</span> 보고서 발송</div>
-        <div class="nav-item" data-page="internal" onclick="goPage(this)"><span class="nav-icon">🔍</span> 내부 체크</div>
+    <div class="nav-item" data-page="internal" onclick="goPage(this)"><span class="nav-icon">🔍</span> 내부 체크</div>
+    <div class="nav-item" data-page="kwgen" onclick="goPage(this)"><span class="nav-icon">✨</span> 키워드 생성기</div>
     <div class="nav-item" data-page="backup" onclick="goPage(this)"><span class="nav-icon">💾</span> 백업/복원</div>
     <div class="nav-section">설정</div>
     <div class="nav-item" data-page="settings" onclick="goPage(this)"><span class="nav-icon">⚙️</span> 설정</div>
@@ -382,6 +383,66 @@ tr:hover td{background:var(--surface2);}
           </div>
           <div class="report-preview" id="report-content"></div>
         </div>
+      </div>
+    </div>
+
+    <!-- 키워드 생성기 -->
+    <div id="page-kwgen" class="page">
+      <div class="page-header"><div><div class="page-title">✨ 키워드 생성기</div><div class="page-sub">지역 × 시술명 × 수식어 조합으로 키워드 자동 생성</div></div></div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:16px">
+
+        <!-- 지역 -->
+        <div class="card">
+          <div class="flex-between mb-8">
+            <div class="card-title">📍 지역</div>
+            <button class="btn btn-secondary btn-sm" onclick="kwAddPreset('region')">기본값</button>
+          </div>
+          <textarea id="kw-region" rows="8" placeholder="강남역&#10;강남&#10;논현동&#10;서초" style="width:100%;resize:vertical"></textarea>
+        </div>
+
+        <!-- 시술명 -->
+        <div class="card">
+          <div class="flex-between mb-8">
+            <div class="card-title">💉 시술명</div>
+            <button class="btn btn-secondary btn-sm" onclick="kwAddPreset('treatment')">기본값</button>
+          </div>
+          <textarea id="kw-treatment" rows="8" placeholder="울쎄라&#10;써마지&#10;리프팅&#10;보톡스&#10;필러" style="width:100%;resize:vertical"></textarea>
+        </div>
+
+        <!-- 수식어 -->
+        <div class="card">
+          <div class="flex-between mb-8">
+            <div class="card-title">🏷️ 수식어 (선택)</div>
+            <button class="btn btn-secondary btn-sm" onclick="kwAddPreset('suffix')">기본값</button>
+          </div>
+          <textarea id="kw-suffix" rows="8" placeholder="가격&#10;잘하는곳&#10;잘하는병원&#10;후기&#10;효과&#10;(비워두면 수식어 없이 생성)" style="width:100%;resize:vertical"></textarea>
+        </div>
+      </div>
+
+      <div class="card mb-16">
+        <div class="flex gap-8" style="flex-wrap:wrap;align-items:center">
+          <label style="display:flex;align-items:center;gap:6px;font-size:13px">
+            <input type="checkbox" id="kw-no-suffix" onchange="generateKeywords()"> 수식어 없는 조합도 포함
+          </label>
+          <label style="display:flex;align-items:center;gap:6px;font-size:13px">
+            <input type="checkbox" id="kw-space" checked onchange="generateKeywords()"> 지역+시술 사이 띄어쓰기
+          </label>
+          <button class="btn btn-primary" onclick="generateKeywords()">🔄 키워드 생성</button>
+          <span id="kw-count" class="text-muted text-sm"></span>
+        </div>
+      </div>
+
+      <div class="card" id="kw-result-area" style="display:none">
+        <div class="flex-between mb-8">
+          <div class="card-title">생성된 키워드</div>
+          <div class="flex gap-8">
+            <button class="btn btn-secondary btn-sm" onclick="copyKeywords()">📋 전체 복사</button>
+            <select id="kw-target-branch" style="width:160px"><option value="">지점 선택</option></select>
+            <button class="btn btn-primary btn-sm" onclick="addKeywordsToBranch()">➕ 지점에 추가</button>
+          </div>
+        </div>
+        <div id="kw-result" style="display:flex;flex-wrap:wrap;gap:6px;max-height:400px;overflow-y:auto;padding:8px 0"></div>
       </div>
     </div>
 
@@ -1509,6 +1570,83 @@ function generateInternal() {
   document.getElementById('internal-content').textContent = content;
   document.getElementById('internal-area').style.display = 'block';
 }
+// ===== 키워드 생성기 =====
+const KW_PRESETS = {
+  region: ['강남역', '강남', '논현동', '서초', '역삼동'],
+  treatment: ['울쎄라', '써마지', '리프팅', '보톡스', '필러', '제모', '리쥬란', '실리프팅', '피부과'],
+  suffix: ['가격', '잘하는곳', '잘하는병원', '후기', '효과', '추천', '비용', '이벤트']
+};
+
+let generatedKeywords = [];
+
+function kwAddPreset(type) {
+  const el = document.getElementById('kw-' + type);
+  const preset = KW_PRESETS[type] || [];
+  const existing = el.value.trim();
+  el.value = existing ? existing + '\n' + preset.join('\n') : preset.join('\n');
+  generateKeywords();
+}
+
+function generateKeywords() {
+  const regions = document.getElementById('kw-region').value.split('\n').map(s=>s.trim()).filter(s=>s);
+  const treatments = document.getElementById('kw-treatment').value.split('\n').map(s=>s.trim()).filter(s=>s);
+  const suffixes = document.getElementById('kw-suffix').value.split('\n').map(s=>s.trim()).filter(s=>s);
+  const noSuffix = document.getElementById('kw-no-suffix').checked;
+  const useSpace = document.getElementById('kw-space').checked;
+  const sep = useSpace ? ' ' : '';
+
+  const set = new Set();
+
+  regions.forEach(r => {
+    treatments.forEach(t => {
+      const base = r + sep + t;
+      // 수식어 없는 조합
+      if (noSuffix || suffixes.length === 0) set.add(base);
+      // 수식어 조합
+      suffixes.forEach(s => set.add(base + ' ' + s));
+    });
+  });
+
+  generatedKeywords = [...set];
+  document.getElementById('kw-count').textContent = `총 ${generatedKeywords.length}개`;
+  document.getElementById('kw-result-area').style.display = 'block';
+
+  // 지점 셀렉트 업데이트
+  const sel = document.getElementById('kw-target-branch');
+  sel.innerHTML = '<option value="">지점 선택</option>' +
+    Object.entries(branches).map(([k,b])=>`<option value="${k}">${b.name}</option>`).join('');
+
+  // 태그 형태로 표시
+  document.getElementById('kw-result').innerHTML = generatedKeywords.map(kw =>
+    `<span style="background:var(--surface2);border:1px solid var(--border);border-radius:20px;padding:4px 12px;font-size:12px;cursor:pointer;white-space:nowrap" title="클릭하여 제거" onclick="removeKw(this,'${kw.replace(/'/g,"\\'")}')">
+      ${kw} <span style="color:var(--text3)">×</span>
+    </span>`
+  ).join('');
+}
+
+function removeKw(el, kw) {
+  generatedKeywords = generatedKeywords.filter(k => k !== kw);
+  el.remove();
+  document.getElementById('kw-count').textContent = `총 ${generatedKeywords.length}개`;
+}
+
+function copyKeywords() {
+  navigator.clipboard.writeText(generatedKeywords.join('\n')).then(() => alert(`✅ ${generatedKeywords.length}개 복사됐습니다!\n지점 목록 → 키워드 대량추가에 붙여넣기 하세요.`));
+}
+
+function addKeywordsToBranch() {
+  const bKey = document.getElementById('kw-target-branch').value;
+  if (!bKey) return alert('지점을 선택해주세요.');
+  const b = branches[bKey];
+  if (!b) return;
+  const existing = b.keywords || [];
+  const newKws = generatedKeywords.filter(kw => !existing.includes(kw));
+  if (!newKws.length) return alert('추가할 새 키워드가 없습니다 (이미 모두 등록됨)');
+  if (!confirm(`${b.name}에 ${newKws.length}개 키워드를 추가합니까?\n(기존 ${existing.length}개 + 신규 ${newKws.length}개)`)) return;
+  db.ref('branches/' + bKey + '/keywords').set([...existing, ...newKws])
+    .then(() => alert(`✅ ${newKws.length}개 키워드가 ${b.name}에 추가됐습니다!`));
+}
+
 function copyInternal() { navigator.clipboard.writeText(document.getElementById('internal-content').textContent).then(()=>alert('복사됐습니다!')); }
 function copyReport() { navigator.clipboard.writeText(document.getElementById('report-content').textContent).then(()=>alert('복사됐습니다!')); }
 function sendKakao() { navigator.clipboard.writeText(document.getElementById('report-content').textContent); window.open('https://open.kakao.com/','_blank'); alert('카카오톡에 붙여넣기 해주세요.'); }
