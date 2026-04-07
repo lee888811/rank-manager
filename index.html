@@ -167,7 +167,7 @@ tr:hover td{background:var(--surface2);}
         <div><div class="page-title">대시보드</div><div class="page-sub" id="today-date"></div></div>
         <div class="flex gap-8">
           <select id="dash-branch-filter" style="width:140px" onchange="renderDashboard()"><option value="">전체 지점</option></select>
-          <button class="btn btn-primary" onclick="runAllCheck()"><span id="check-icon">🔄</span> 순위 체크</button>
+          <button class="btn btn-secondary" onclick="alert('순위 체크는 매일 새벽 2시 자동으로 실행됩니다.\n수동 체크가 필요하면 Google Apps Script에서 testNow 함수를 실행하세요.')">ℹ️ 자동 체크 안내</button>
         </div>
       </div>
       <div id="api-warning" class="alert alert-warning" style="display:none">
@@ -230,15 +230,14 @@ tr:hover td{background:var(--surface2);}
             <option value="10">10위 이내</option>
             <option value="0">전체 보기</option>
           </select>
-          <button id="check-btn" class="btn btn-primary" onclick="runAllCheck()">🔄 순위 체크</button>
+          <button id="check-btn" class="btn btn-secondary" onclick="alert('순위 체크는 매일 새벽 2시 자동 실행됩니다.\n수동 체크: Google Apps Script → testNow 함수 실행')">ℹ️ 자동 체크</button>
         </div>
       </div>
       <div id="rank-progress" style="display:none">
         <div class="alert alert-info" style="justify-content:space-between">
           <div style="display:flex;align-items:center;gap:8px"><span class="spinner"></span><span id="rank-progress-text">체크 중...</span></div>
           <div style="display:flex;gap:8px">
-            <button id="pause-btn" class="btn btn-secondary btn-sm" onclick="togglePause()">⏸ 일시정지</button>
-            <button class="btn btn-danger btn-sm" onclick="stopCheck()">⏹ 중단</button>
+          <div class="alert alert-info" style="margin-bottom:0;font-size:12px">매일 새벽 2시 자동 체크</div>
           </div>
         </div>
         <div class="progress-bar"><div class="progress-fill" id="rank-progress-fill" style="width:0%"></div></div>
