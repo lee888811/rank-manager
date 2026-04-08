@@ -942,6 +942,7 @@ function renderBranchList() {
             <input type="text" id="kw-search-${key}" placeholder="검색..." onclick="event.stopPropagation()" oninput="filterKwTable('${key}',this.value)"
               style="width:120px;padding:4px 8px;font-size:12px;height:28px">
             <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();removeDuplicateKws('${key}')">중복 제거</button>
+            <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();removeSpacesFromKws('${key}')">띄어쓰기 제거</button>
             <span id="toggle-kw-${key}" style="color:var(--text3);font-size:12px">▼ 펼치기</span>
           </div>
         </div>
@@ -1167,6 +1168,30 @@ function addSingleKw(bKey) {
       const btn = document.getElementById('toggle-kw-' + bKey);
       if (btn) btn.textContent = '▲ 접기';
     }, 100);
+  });
+}
+
+function removeSpacesFromKws(bKey) {
+  const kws = branches[bKey].keywords || [];
+  const changed = kws.filter(k => k !== k.replace(/\s+/g, ''));
+  if (changed.length === 0) return alert('띄어쓰기 포함 키워드가 없습니다.');
+  if (!confirm(`띄어쓰기 포함 키워드 ${changed.length}개를 수정합니까?\n\n${changed.slice(0,10).join('\n')}${changed.length>10?`\n...외 ${changed.length-10}개`:''}`)) return;
+  // 띄어쓰기 제거 후 중복도 함께 제거
+  const unique = [...new Set(kws.map(k => k.replace(/\s+/g, '')))];
+  const savedQuery = document.getElementById('kw-search-' + bKey)?.value || '';
+  db.ref(`branches/${bKey}/keywords`).set(unique).then(() => {
+    alert(`✅ ${changed.length}개 키워드 띄어쓰기 제거됐습니다!`);
+    setTimeout(() => {
+      const s = document.getElementById('kw-' + bKey);
+      if (s) s.style.display = 'block';
+      const btn = document.getElementById('toggle-kw-' + bKey);
+      if (btn) btn.textContent = '▲ 접기';
+      if (savedQuery) {
+        const inp = document.getElementById('kw-search-' + bKey);
+        if (inp) inp.value = savedQuery;
+        filterKwTable(bKey, savedQuery);
+      }
+    }, 150);
   });
 }
 
