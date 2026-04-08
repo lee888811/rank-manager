@@ -939,7 +939,7 @@ function renderBranchList() {
                 </tr>
               </thead>
               <tbody>
-                ${kws.map((kw, idx) => {
+                ${kws.slice().sort((a,b)=>a.localeCompare(b,'ko')).map((kw, idx) => {
                   const isDupe = kws.indexOf(kw) !== idx;
                   const dupeCount = kws.filter(k=>k===kw).length;
                   return `<tr id="kw-row-${key}-${idx}" style="${isDupe?'background:rgba(247,79,79,0.05)':''}${idx%2===0&&!isDupe?'':''}">
