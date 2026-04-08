@@ -925,7 +925,7 @@ function renderBranchList() {
             })()}
           </div>
           <div style="display:flex;align-items:center;gap:8px">
-            <input type="text" placeholder="검색..." onclick="event.stopPropagation()" oninput="filterKwTable('${key}',this.value)"
+            <input type="text" id="kw-search-${key}" placeholder="검색..." onclick="event.stopPropagation()" oninput="filterKwTable('${key}',this.value)"
               style="width:120px;padding:4px 8px;font-size:12px;height:28px">
             <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();removeDuplicateKws('${key}')">중복 제거</button>
             <span id="toggle-kw-${key}" style="color:var(--text3);font-size:12px">▼ 펼치기</span>
@@ -1032,7 +1032,8 @@ function deleteKw(bKey, kwVal) {
   const idx = kws.indexOf(kwVal);
   if (idx === -1) return alert('키워드를 찾을 수 없습니다.');
   kws.splice(idx, 1);
-  // 창 열림 상태 유지
+  // 검색어 저장
+  const savedQuery = document.getElementById('kw-search-' + bKey)?.value || '';
   const section = document.getElementById('kw-' + bKey);
   const wasOpen = section && section.style.display !== 'none';
   db.ref(`branches/${bKey}/keywords`).set(kws).then(() => {
@@ -1042,7 +1043,13 @@ function deleteKw(bKey, kwVal) {
         if (s) s.style.display = 'block';
         const btn = document.getElementById('toggle-kw-' + bKey);
         if (btn) btn.textContent = '▲ 접기';
-      }, 100);
+        // 검색어 복원
+        if (savedQuery) {
+          const inp = document.getElementById('kw-search-' + bKey);
+          if (inp) inp.value = savedQuery;
+          filterKwTable(bKey, savedQuery);
+        }
+      }, 150);
     }
   });
 }
