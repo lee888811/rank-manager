@@ -1058,11 +1058,16 @@ function addSingleKw(bKey) {
 
 function removeDuplicateKws(bKey) {
   const kws = branches[bKey].keywords || [];
+  const seen = {};
+  const dupes = [];
+  kws.forEach(k => {
+    if (seen[k]) { if (!dupes.includes(k)) dupes.push(k); }
+    else seen[k] = true;
+  });
+  if (dupes.length === 0) return alert('중복 키워드가 없습니다.');
+  if (!confirm(`중복 키워드 ${dupes.length}개를 제거합니까?\n\n${dupes.join('\n')}`)) return;
   const unique = [...new Set(kws)];
-  const removed = kws.length - unique.length;
-  if (removed === 0) return alert('중복 키워드가 없습니다.');
-  if (!confirm(`중복 키워드 ${removed}개를 제거합니까?`)) return;
-  db.ref(`branches/${bKey}/keywords`).set(unique).then(() => alert(`✅ ${removed}개 중복 제거됐습니다!`));
+  db.ref(`branches/${bKey}/keywords`).set(unique).then(() => alert(`✅ ${kws.length - unique.length}개 중복 제거됐습니다!`));
 }
 
 function toggleSection(id) {
