@@ -913,7 +913,16 @@ function renderBranchList() {
           <div style="display:flex;align-items:center;gap:8px">
             <span style="font-size:12px;font-weight:600;color:var(--text2)">키워드</span>
             <span class="badge badge-new">${kws.length}개</span>
-            ${(() => { const dupes = kws.filter((k,i)=>kws.indexOf(k)!==i); return dupes.length ? `<span class="badge badge-down">중복 ${[...new Set(dupes)].length}개</span>` : ''; })()}
+            ${(() => { 
+              const normSet = {}; 
+              const dupeNorms = new Set();
+              kws.forEach(k => { 
+                const n = k.replace(/\s+/g,''); 
+                if (normSet[n]) dupeNorms.add(n); 
+                else normSet[n] = true; 
+              }); 
+              return dupeNorms.size ? `<span class="badge badge-down">중복 ${dupeNorms.size}개</span>` : ''; 
+            })()}
           </div>
           <div style="display:flex;align-items:center;gap:8px">
             <input type="text" placeholder="검색..." onclick="event.stopPropagation()" oninput="filterKwTable('${key}',this.value)"
@@ -1058,16 +1067,25 @@ function addSingleKw(bKey) {
 
 function removeDuplicateKws(bKey) {
   const kws = branches[bKey].keywords || [];
-  const seen = {};
-  const dupes = [];
+
+  // 띄어쓰기 제거한 값 기준으로 중복 체크
+  const seenNorm = {};
+  const toRemove = [];
+  const unique = [];
+
   kws.forEach(k => {
-    if (seen[k]) { if (!dupes.includes(k)) dupes.push(k); }
-    else seen[k] = true;
+    const norm = k.replace(/\s+/g, '');
+    if (seenNorm[norm]) {
+      toRemove.push(k);
+    } else {
+      seenNorm[norm] = true;
+      unique.push(k);
+    }
   });
-  if (dupes.length === 0) return alert('중복 키워드가 없습니다.');
-  if (!confirm(`중복 키워드 ${dupes.length}개를 제거합니까?\n\n${dupes.join('\n')}`)) return;
-  const unique = [...new Set(kws)];
-  db.ref(`branches/${bKey}/keywords`).set(unique).then(() => alert(`✅ ${kws.length - unique.length}개 중복 제거됐습니다!`));
+
+  if (toRemove.length === 0) return alert('중복 키워드가 없습니다.');
+  if (!confirm(`중복 키워드 ${toRemove.length}개를 제거합니까?\n(띄어쓰기 포함 중복)\n\n${toRemove.join('\n')}`)) return;
+  db.ref(`branches/${bKey}/keywords`).set(unique).then(() => alert(`✅ ${toRemove.length}개 중복 제거됐습니다!`));
 }
 
 function toggleSection(id) {
