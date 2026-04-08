@@ -198,7 +198,7 @@ tr:hover td{background:var(--surface2);}
     <div class="nav-item" data-page="kwgen" onclick="goPage(this)"><span class="nav-icon">✨</span> 키워드 생성기</div>
     <div class="nav-item" data-page="backup" onclick="goPage(this)"><span class="nav-icon">💾</span> 백업/복원</div>
     <div class="nav-section">설정</div>
-    <div class="nav-item" data-page="settings" onclick="goPage(this)"><span class="nav-icon">⚙️</span> 설정</div>
+    <div class="nav-item" data-page="settings" onclick="goPage(this);loadAdSettings()"><span class="nav-icon">⚙️</span> 설정</div>
     <div class="nav-item" onclick="doLogout()" style="margin-top:8px"><span class="nav-icon">🚪</span> 로그아웃</div>
   </aside>
 
@@ -514,6 +514,20 @@ tr:hover td{background:var(--surface2);}
           <button class="btn btn-secondary" onclick="testApi()">🧪 API 테스트</button>
         </div>
         <div id="api-test-result" class="mt-8" style="display:none"></div>
+      </div>
+
+      <!-- 검색광고 API -->
+      <div class="card">
+        <div class="card-title">네이버 검색광고 API <span style="font-size:12px;color:var(--text3);font-weight:400">(키워드 조회수용)</span></div>
+        <div class="alert alert-info mb-16">💡 searchad.naver.com → 도구 → API 사용 관리에서 확인</div>
+        <div style="padding:12px 0;border-bottom:1px solid var(--border)"><div class="form-label">고객 ID (Customer ID)</div><input type="text" id="set-ad-customer-id" placeholder="1226572" style="max-width:360px;margin-top:6px"></div>
+        <div style="padding:12px 0;border-bottom:1px solid var(--border)"><div class="form-label">Access License</div><input type="password" id="set-ad-license" placeholder="Access License 입력" style="max-width:360px;margin-top:6px"></div>
+        <div style="padding:12px 0;border-bottom:1px solid var(--border)"><div class="form-label">Secret Key</div><input type="password" id="set-ad-secret" placeholder="Secret Key 입력" style="max-width:360px;margin-top:6px"></div>
+        <div class="flex gap-8 mt-16">
+          <button class="btn btn-primary" onclick="saveAdSettings()">💾 저장</button>
+          <button class="btn btn-secondary" onclick="testAdApi()">🧪 연동 테스트</button>
+        </div>
+        <div id="ad-test-result" class="mt-8" style="display:none"></div>
       </div>
       <div class="card">
         <div class="card-title">비밀번호 변경</div>
@@ -947,6 +961,9 @@ function renderBranchList() {
                   </th>
                   <th style="padding:8px 12px;text-align:left;width:50px;color:var(--text2)">#</th>
                   <th style="padding:8px 12px;text-align:left;color:var(--text2)">키워드</th>
+                  <th style="padding:8px 12px;text-align:center;width:80px;color:var(--text2)">
+                    월검색수 <button class="btn btn-secondary btn-sm" style="padding:1px 6px;font-size:10px;margin-left:4px" onclick="loadVolumeForBranch('${key}')">조회</button>
+                  </th>
                   <th style="padding:8px 12px;text-align:center;width:60px;color:var(--text2)">중복</th>
                   <th style="padding:8px 12px;text-align:center;width:120px;color:var(--text2)">작업</th>
                 </tr>
@@ -965,6 +982,7 @@ function renderBranchList() {
                       <input id="kw-edit-${key}-${idx}" value="${kw.replace(/"/g,'&quot;')}" style="display:none;width:90%;padding:2px 6px;font-size:13px"
                         onkeydown="if(event.key==='Enter')saveKwEdit('${key}',${idx});if(event.key==='Escape')cancelKwEdit('${key}',${idx})">
                     </td>
+                    <td style="padding:6px 12px;text-align:center;font-size:12px" id="kw-vol-${key}-${idx}">-</td>
                     <td style="padding:6px 12px;text-align:center">${dupeCount>1?`<span style="color:var(--danger);font-size:11px">×${dupeCount}</span>`:''}</td>
                     <td style="padding:6px 12px;text-align:center">
                       <div style="display:flex;gap:4px;justify-content:center">
@@ -986,6 +1004,39 @@ function renderBranchList() {
 }
 
 // ===== 키워드 테이블 편집 =====
+async function loadVolumeForBranch(bKey) {
+  const kws = (branches[bKey].keywords || []).slice().sort((a,b)=>a.localeCompare(b,'ko'));
+  if (!kws.length) return alert('키워드가 없습니다.');
+  if (!adSettings.customerId) {
+    const saved = await new Promise(r => db.ref('adSettings').once('value', s => r(s.val())));
+    if (!saved) return alert('검색광고 API 설정이 필요합니다.\n설정 → 네이버 검색광고 API');
+    adSettings = saved;
+  }
+
+  // 20개씩 나눠서 조회 (API 제한)
+  const chunkSize = 20;
+  const allVolumes = {};
+  for (let i = 0; i < kws.length; i += chunkSize) {
+    const chunk = kws.slice(i, i + chunkSize);
+    const result = await fetchKeywordVolume(chunk);
+    if (result) Object.assign(allVolumes, result);
+    await new Promise(r => setTimeout(r, 300));
+  }
+
+  // 테이블에 표시
+  kws.forEach((kw, idx) => {
+    const el = document.getElementById(`kw-vol-${bKey}-${idx}`);
+    if (!el) return;
+    const vol = allVolumes[kw];
+    if (vol !== undefined) {
+      const color = vol >= 10000 ? 'var(--success)' : vol >= 1000 ? 'var(--warning)' : 'var(--text2)';
+      el.innerHTML = `<span style="color:${color};font-weight:600">${vol >= 1000 ? (vol/1000).toFixed(1)+'K' : vol}</span>`;
+    } else {
+      el.textContent = '-';
+    }
+  });
+}
+
 function toggleAllKwCheck(bKey, checked) {
   document.querySelectorAll(`.kw-check-${bKey}`).forEach(cb => {
     if (cb.closest('tr').style.display !== 'none') cb.checked = checked;
@@ -1864,6 +1915,76 @@ function sendKakao() { navigator.clipboard.writeText(document.getElementById('re
 function sendEmail() { window.open(`mailto:?subject=${encodeURIComponent('미클리닉 순위 보고서')}&body=${encodeURIComponent(document.getElementById('report-content').textContent)}`); }
 
 // ===== 설정 =====
+// ===== 검색광고 API =====
+let adSettings = {};
+
+function saveAdSettings() {
+  const customerId = document.getElementById('set-ad-customer-id').value.trim();
+  const license = document.getElementById('set-ad-license').value.trim();
+  const secret = document.getElementById('set-ad-secret').value.trim();
+  if (!customerId || !license || !secret) return alert('3가지 모두 입력해주세요.');
+  adSettings = { customerId, license, secret };
+  db.ref('adSettings').set(adSettings).then(() => alert('✅ 검색광고 API 저장됐습니다!'));
+}
+
+function testAdApi() {
+  const el = document.getElementById('ad-test-result');
+  el.style.display = 'block';
+  el.innerHTML = '<span class="text-muted">테스트 중...</span>';
+  fetchKeywordVolume(['강남피부과']).then(result => {
+    if (result && result['강남피부과'] !== undefined) {
+      el.innerHTML = `<span class="text-success">✅ 연동 성공! 강남피부과 월간 검색수: ${result['강남피부과'].toLocaleString()}회</span>`;
+    } else {
+      el.innerHTML = '<span class="text-danger">❌ 연동 실패 — API 키를 확인해주세요</span>';
+    }
+  });
+}
+
+async function fetchKeywordVolume(keywords) {
+  if (!adSettings.customerId || !adSettings.license || !adSettings.secret) {
+    const saved = await new Promise(r => db.ref('adSettings').once('value', s => r(s.val())));
+    if (!saved) return null;
+    adSettings = saved;
+  }
+  try {
+    const body = JSON.stringify({ hintKeywords: keywords, showDetail: 1 });
+    const timestamp = Date.now();
+    const method = 'POST';
+    const path = '/keywordstool';
+    // HMAC-SHA256 서명 (Cloudflare Workers 프록시 통해 처리)
+    const res = await fetch(`${PROXY}/ad/keywordstool`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Ad-Customer-Id': adSettings.customerId,
+        'X-Ad-License': adSettings.license,
+        'X-Ad-Secret': adSettings.secret,
+        'X-Timestamp': timestamp
+      },
+      body
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const result = {};
+    (data.keywordList || []).forEach(item => {
+      result[item.relKeyword] = (item.monthlyPcQcCnt || 0) + (item.monthlyMobileQcCnt || 0);
+    });
+    return result;
+  } catch(e) { return null; }
+}
+
+// 설정 페이지 불러오기에 adSettings 추가
+function loadAdSettings() {
+  db.ref('adSettings').once('value', snap => {
+    const s = snap.val();
+    if (!s) return;
+    adSettings = s;
+    document.getElementById('set-ad-customer-id').value = s.customerId || '';
+    document.getElementById('set-ad-license').value = s.license || '';
+    document.getElementById('set-ad-secret').value = s.secret || '';
+  });
+}
+
 function saveSettings() {
   settings={clientId:document.getElementById('set-client-id').value.trim(),clientSecret:document.getElementById('set-client-secret').value.trim(),rankDepth:parseInt(document.getElementById('set-rank-depth').value),missingThreshold:parseInt(document.getElementById('set-missing-threshold').value)};
   db.ref('settings').set(settings).then(()=>{ document.getElementById('api-warning').style.display=settings.clientId?'none':'flex'; alert('저장됐습니다!'); });
