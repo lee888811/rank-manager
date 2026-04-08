@@ -932,15 +932,19 @@ function renderBranchList() {
           </div>
         </div>
         <div id="kw-${key}" style="display:none">
-          <div style="padding:10px 14px;border-bottom:1px solid var(--border);display:flex;gap:8px">
+          <div style="padding:10px 14px;border-bottom:1px solid var(--border);display:flex;gap:8px;align-items:center">
             <input type="text" id="kw-add-input-${key}" placeholder="새 키워드 입력" style="flex:1;padding:6px 10px;font-size:13px"
               onkeydown="if(event.key==='Enter')addSingleKw('${key}')">
             <button class="btn btn-primary btn-sm" onclick="addSingleKw('${key}')">+ 추가</button>
+            <button class="btn btn-danger btn-sm" id="kw-bulk-del-btn-${key}" style="display:none" onclick="bulkDeleteKws('${key}')">선택 삭제</button>
           </div>
           <div style="max-height:400px;overflow-y:auto">
             <table style="width:100%;border-collapse:collapse;font-size:13px" id="kw-table-${key}">
               <thead style="position:sticky;top:0;z-index:1">
                 <tr style="background:var(--surface2)">
+                  <th style="padding:8px 12px;width:36px;text-align:center">
+                    <input type="checkbox" onclick="toggleAllKwCheck('${key}',this.checked)" title="전체 선택">
+                  </th>
                   <th style="padding:8px 12px;text-align:left;width:50px;color:var(--text2)">#</th>
                   <th style="padding:8px 12px;text-align:left;color:var(--text2)">키워드</th>
                   <th style="padding:8px 12px;text-align:center;width:60px;color:var(--text2)">중복</th>
@@ -951,7 +955,10 @@ function renderBranchList() {
                 ${kws.slice().sort((a,b)=>a.localeCompare(b,'ko')).map((kw, idx) => {
                   const isDupe = kws.indexOf(kw) !== idx;
                   const dupeCount = kws.filter(k=>k===kw).length;
-                  return `<tr id="kw-row-${key}-${idx}" style="${isDupe?'background:rgba(247,79,79,0.05)':''}${idx%2===0&&!isDupe?'':''}">
+                  return `<tr id="kw-row-${key}-${idx}" style="${isDupe?'background:rgba(247,79,79,0.05)':''}">
+                    <td style="padding:6px 12px;text-align:center">
+                      <input type="checkbox" class="kw-check-${key}" value="${kw.replace(/"/g,'&quot;')}" onchange="updateBulkDelBtn('${key}')">
+                    </td>
                     <td style="padding:6px 12px;color:var(--text3)">${idx+1}</td>
                     <td style="padding:6px 12px">
                       <span id="kw-text-${key}-${idx}">${kw}</span>
@@ -979,6 +986,43 @@ function renderBranchList() {
 }
 
 // ===== 키워드 테이블 편집 =====
+function toggleAllKwCheck(bKey, checked) {
+  document.querySelectorAll(`.kw-check-${bKey}`).forEach(cb => {
+    if (cb.closest('tr').style.display !== 'none') cb.checked = checked;
+  });
+  updateBulkDelBtn(bKey);
+}
+
+function updateBulkDelBtn(bKey) {
+  const checked = document.querySelectorAll(`.kw-check-${bKey}:checked`).length;
+  const btn = document.getElementById(`kw-bulk-del-btn-${bKey}`);
+  if (btn) {
+    btn.style.display = checked > 0 ? 'inline-block' : 'none';
+    btn.textContent = `선택 삭제 (${checked}개)`;
+  }
+}
+
+function bulkDeleteKws(bKey) {
+  const checked = [...document.querySelectorAll(`.kw-check-${bKey}:checked`)].map(cb => cb.value);
+  if (!checked.length) return;
+  if (!confirm(`선택한 ${checked.length}개 키워드를 삭제합니까?\n\n${checked.slice(0,10).join('\n')}${checked.length>10?`\n...외 ${checked.length-10}개`:''}`)) return;
+  const savedQuery = document.getElementById('kw-search-' + bKey)?.value || '';
+  const kws = (branches[bKey].keywords || []).filter(k => !checked.includes(k));
+  db.ref(`branches/${bKey}/keywords`).set(kws).then(() => {
+    setTimeout(() => {
+      const s = document.getElementById('kw-' + bKey);
+      if (s) s.style.display = 'block';
+      const btn = document.getElementById('toggle-kw-' + bKey);
+      if (btn) btn.textContent = '▲ 접기';
+      if (savedQuery) {
+        const inp = document.getElementById('kw-search-' + bKey);
+        if (inp) inp.value = savedQuery;
+        filterKwTable(bKey, savedQuery);
+      }
+    }, 150);
+  });
+}
+
 function filterKwTable(bKey, query) {
   const q = query.toLowerCase();
   const rows = document.querySelectorAll(`#kw-table-${bKey} tbody tr`);
