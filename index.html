@@ -1007,32 +1007,25 @@ function renderBranchList() {
 async function loadVolumeForBranch(bKey) {
   const kws = (branches[bKey].keywords || []).slice().sort((a,b)=>a.localeCompare(b,'ko'));
   if (!kws.length) return alert('키워드가 없습니다.');
-  if (!adSettings.customerId) {
-    const saved = await new Promise(r => db.ref('adSettings').once('value', s => r(s.val())));
-    if (!saved) return alert('검색광고 API 설정이 필요합니다.\n설정 → 네이버 검색광고 API');
-    adSettings = saved;
+
+  // Firebase에서 저장된 검색수 읽기
+  const snap = await db.ref('keywordVolumes').once('value');
+  const volumes = snap.val() || {};
+
+  if (Object.keys(volumes).length === 0) {
+    alert('검색수 데이터가 없습니다.\nApps Script → keyword-volume → testVolumeNow 실행해주세요.');
+    return;
   }
 
-  // 20개씩 나눠서 조회 (API 제한)
-  const chunkSize = 20;
-  const allVolumes = {};
-  for (let i = 0; i < kws.length; i += chunkSize) {
-    const chunk = kws.slice(i, i + chunkSize);
-    const result = await fetchKeywordVolume(chunk);
-    if (result) Object.assign(allVolumes, result);
-    await new Promise(r => setTimeout(r, 300));
-  }
-
-  // 테이블에 표시
   kws.forEach((kw, idx) => {
     const el = document.getElementById(`kw-vol-${bKey}-${idx}`);
     if (!el) return;
-    const vol = allVolumes[kw];
-    if (vol !== undefined) {
+    const vol = volumes[kw];
+    if (vol !== undefined && vol !== null) {
       const color = vol >= 10000 ? 'var(--success)' : vol >= 1000 ? 'var(--warning)' : 'var(--text2)';
       el.innerHTML = `<span style="color:${color};font-weight:600">${vol >= 1000 ? (vol/1000).toFixed(1)+'K' : vol}</span>`;
     } else {
-      el.textContent = '-';
+      el.innerHTML = '<span style="color:var(--text3)">-</span>';
     }
   });
 }
