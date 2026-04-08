@@ -1013,21 +1013,31 @@ async function loadVolumeForBranch(bKey) {
   const volumes = snap.val() || {};
 
   if (Object.keys(volumes).length === 0) {
-    alert('검색수 데이터가 없습니다.\nApps Script → keyword-volume → testVolumeNow 실행해주세요.');
+    alert('검색수 데이터가 없습니다.\nApps Script → keyword-volume → runKeywordVolume 실행해주세요.');
     return;
   }
 
+  // 띄어쓰기 제거한 키로 역매핑 생성
+  const normMap = {};
+  Object.keys(volumes).forEach(k => {
+    normMap[k.replace(/\s+/g, '')] = volumes[k];
+  });
+
+  let found = 0;
   kws.forEach((kw, idx) => {
     const el = document.getElementById(`kw-vol-${bKey}-${idx}`);
     if (!el) return;
-    const vol = volumes[kw];
+    // 정확히 일치 먼저, 없으면 띄어쓰기 무시해서 찾기
+    const vol = volumes[kw] !== undefined ? volumes[kw] : normMap[kw.replace(/\s+/g, '')];
     if (vol !== undefined && vol !== null) {
       const color = vol >= 10000 ? 'var(--success)' : vol >= 1000 ? 'var(--warning)' : 'var(--text2)';
       el.innerHTML = `<span style="color:${color};font-weight:600">${vol >= 1000 ? (vol/1000).toFixed(1)+'K' : vol}</span>`;
+      found++;
     } else {
       el.innerHTML = '<span style="color:var(--text3)">-</span>';
     }
   });
+  if (found === 0) alert('매칭된 키워드가 없습니다.\nrunKeywordVolume을 실행해서 현재 키워드 기준으로 다시 조회해주세요.');
 }
 
 function toggleAllKwCheck(bKey, checked) {
@@ -1094,7 +1104,7 @@ function cancelKwEdit(bKey, idx) {
 }
 
 function saveKwEdit(bKey, idx, oldVal) {
-  const newVal = document.getElementById(`kw-edit-${bKey}-${idx}`).value.trim();
+  const newVal = document.getElementById(`kw-edit-${bKey}-${idx}`).value.trim().replace(/\s+/g, '');
   if (!newVal) return alert('키워드를 입력해주세요.');
   const kws = [...(branches[bKey].keywords || [])];
   const realIdx = kws.indexOf(oldVal);
@@ -1144,7 +1154,7 @@ function deleteKw(bKey, kwVal) {
 
 function addSingleKw(bKey) {
   const input = document.getElementById(`kw-add-input-${bKey}`);
-  const val = input.value.trim();
+  const val = input.value.trim().replace(/\s+/g, '');
   if (!val) return alert('키워드를 입력해주세요.');
   const kws = [...(branches[bKey].keywords || [])];
   if (kws.includes(val)) return alert('이미 등록된 키워드입니다.');
@@ -1237,7 +1247,7 @@ function renderKwTags() {
 function toggleBulkKw() { const el=document.getElementById('bulk-kw-area'); el.style.display=el.style.display==='none'?'block':'none'; }
 function confirmBulkKeywords() {
   const raw=document.getElementById('bulk-kw-input').value.trim();
-  const kws=[...new Set(raw.split('\n').map(k=>k.trim()).filter(k=>k))];
+  const kws=[...new Set(raw.split('\n').map(k=>k.trim().replace(/\s+/g,'')).filter(k=>k))];
   let added=0; kws.forEach(kw=>{ if(!tempKeywords.includes(kw)) { tempKeywords.push(kw); added++; } });
   renderKwTags(); document.getElementById('bulk-kw-input').value=''; toggleBulkKw();
   alert(`✅ ${added}개 키워드 추가 (총 ${tempKeywords.length}개)`);
@@ -1895,7 +1905,7 @@ function addKeywordsToBranch() {
   const b = branches[bKey];
   if (!b) return;
   const existing = b.keywords || [];
-  const newKws = generatedKeywords.filter(kw => !existing.includes(kw));
+  const newKws = generatedKeywords.map(kw => kw.replace(/\s+/g,'')).filter(kw => !existing.map(e=>e.replace(/\s+/g,'')).includes(kw.replace(/\s+/g,'')));
   if (!newKws.length) return alert('추가할 새 키워드가 없습니다 (이미 모두 등록됨)');
   if (!confirm(`${b.name}에 ${newKws.length}개 키워드를 추가합니까?\n(기존 ${existing.length}개 + 신규 ${newKws.length}개)`)) return;
   db.ref('branches/' + bKey + '/keywords').set([...existing, ...newKws])
