@@ -1002,6 +1002,12 @@ function renderBranchList() {
       </div>
     </div>`;
   }).join('');
+// 조회수 자동 로드
+setTimeout(function() {
+  Object.keys(branches).forEach(function(bKey) {
+    loadVolumeForBranch(bKey);
+  });
+}, 500);
 }
 
 // ===== 키워드 테이블 편집 =====
