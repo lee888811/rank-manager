@@ -1231,6 +1231,12 @@ function toggleSection(id) {
   const isOpen=el.style.display!=='none';
   el.style.display=isOpen?'none':'block';
   btn.textContent=isOpen?'▼ 펼치기':'▲ 접기';
+  
+  // 키워드 섹션 펼칠 때 조회수 자동 로드
+  if (!isOpen && id.startsWith('kw-')) {
+    const bKey = id.replace('kw-', '');
+    if (branches[bKey]) loadVolumeForBranch(bKey);
+  }
 }
 
 function filterSection(id, q) {
