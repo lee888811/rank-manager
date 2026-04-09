@@ -1002,46 +1002,28 @@ function renderBranchList() {
       </div>
     </div>`;
   }).join('');
-// 조회수 자동 로드
-setTimeout(function() {
-  Object.keys(branches).forEach(function(bKey) {
-    loadVolumeForBranch(bKey);
-  });
-}, 500);
 }
 
 // ===== 키워드 테이블 편집 =====
 async function loadVolumeForBranch(bKey) {
   const kws = (branches[bKey].keywords || []).slice().sort((a,b)=>a.localeCompare(b,'ko'));
-  if (!kws.length) return alert('키워드가 없습니다.');
-
-  // Firebase에서 저장된 검색수 읽기
+  if (!kws.length) return;
   const snap = await db.ref('keywordVolumes').once('value');
   const volumes = snap.val() || {};
-
-if (Object.keys(volumes).length === 0) return;
-
-  // 띄어쓰기 제거한 키로 역매핑 생성
+  if (Object.keys(volumes).length === 0) return;
   const normMap = {};
-  Object.keys(volumes).forEach(k => {
-    normMap[k.replace(/\s+/g, '')] = volumes[k];
-  });
-
-  let found = 0;
+  Object.keys(volumes).forEach(k => { normMap[k.replace(/\s+/g,'')] = volumes[k]; });
   kws.forEach((kw, idx) => {
     const el = document.getElementById(`kw-vol-${bKey}-${idx}`);
     if (!el) return;
-    // 정확히 일치 먼저, 없으면 띄어쓰기 무시해서 찾기
-    const vol = volumes[kw] !== undefined ? volumes[kw] : normMap[kw.replace(/\s+/g, '')];
+    const vol = volumes[kw] !== undefined ? volumes[kw] : normMap[kw.replace(/\s+/g,'')];
     if (vol !== undefined && vol !== null) {
       const color = vol >= 10000 ? 'var(--success)' : vol >= 1000 ? 'var(--warning)' : 'var(--text2)';
       el.innerHTML = `<span style="color:${color};font-weight:600">${vol >= 1000 ? (vol/1000).toFixed(1)+'K' : vol}</span>`;
-      found++;
     } else {
       el.innerHTML = '<span style="color:var(--text3)">-</span>';
     }
   });
-// if (found === 0) alert(...); // 팝업 제거
 }
 
 function toggleAllKwCheck(bKey, checked) {
