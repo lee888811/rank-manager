@@ -1019,10 +1019,7 @@ async function loadVolumeForBranch(bKey) {
   const snap = await db.ref('keywordVolumes').once('value');
   const volumes = snap.val() || {};
 
-  if (Object.keys(volumes).length === 0) {
-    alert('검색수 데이터가 없습니다.\nApps Script → keyword-volume → runKeywordVolume 실행해주세요.');
-    return;
-  }
+if (Object.keys(volumes).length === 0) return;
 
   // 띄어쓰기 제거한 키로 역매핑 생성
   const normMap = {};
@@ -1044,7 +1041,7 @@ async function loadVolumeForBranch(bKey) {
       el.innerHTML = '<span style="color:var(--text3)">-</span>';
     }
   });
-  if (found === 0) alert('매칭된 키워드가 없습니다.\nrunKeywordVolume을 실행해서 현재 키워드 기준으로 다시 조회해주세요.');
+// if (found === 0) alert(...); // 팝업 제거
 }
 
 function toggleAllKwCheck(bKey, checked) {
