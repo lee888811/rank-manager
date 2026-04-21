@@ -1627,17 +1627,16 @@ function renderDashboard() {
 
   // 전체 통계
   let totalRanked = 0, totalMissing = 0;
-  const kwMap = {};
-  Object.values(rankings).forEach(r => {
-    const key = `${r.branchKey}_${r.keyword}`;
-    if (!kwMap[key]) kwMap[key] = { branchKey: r.branchKey, blog: null, cafe: null };
-    if (r.tab === '카페') { if (!kwMap[key].cafe || r.rank < (kwMap[key].cafe || 999)) kwMap[key].cafe = r.rank; }
-    else { if (!kwMap[key].blog || r.rank < (kwMap[key].blog || 999)) kwMap[key].blog = r.rank; }
-  });
-  Object.values(kwMap).forEach(item => {
-    const best = Math.min(item.blog || 999, item.cafe || 999);
-    if (best <= 15) totalRanked++;
-    else totalMissing++;
+  Object.entries(branches).forEach(([bKey, b]) => {
+    const keywords = b.keywords || [];
+    const bRank = (rankings && rankings[bKey]) || {};
+    keywords.forEach(kw => {
+      const kwKey = kw.replace(/\s/g, '');
+      const kwData = bRank[kwKey] || {};
+      const allRanks = [...Object.values(kwData.blog || {}), ...Object.values(kwData.cafe || {})];
+      const best = allRanks.length ? Math.min(...allRanks) : 999;
+      if (best <= 15) totalRanked++; else totalMissing++;
+    });
   });
   const el_ranked = document.getElementById('stat-ranked');
   const el_missing = document.getElementById('stat-missing');
@@ -1647,12 +1646,14 @@ function renderDashboard() {
   // 지점별 카드
   container.innerHTML = targetBranches.map(([bKey, b]) => {
     const keywords = b.keywords || [];
-    const bRankings = Object.values(rankings).filter(r => r.branchKey === bKey);
+    const bRank = (rankings && rankings[bKey]) || {};
 
-    // 키워드별 최상위 순위
     const kwBest = {};
-    bRankings.forEach(r => {
-      if (!kwBest[r.keyword] || (r.rank && r.rank < kwBest[r.keyword])) kwBest[r.keyword] = r.rank;
+    keywords.forEach(kw => {
+      const kwKey = kw.replace(/\s/g, '');
+      const kwData = bRank[kwKey] || {};
+      const allRanks = [...Object.values(kwData.blog || {}), ...Object.values(kwData.cafe || {})];
+      if (allRanks.length) kwBest[kw] = Math.min(...allRanks);
     });
 
     const top1 = keywords.filter(kw => kwBest[kw] === 1).length;
@@ -1660,9 +1661,7 @@ function renderDashboard() {
     const top10 = keywords.filter(kw => kwBest[kw] && kwBest[kw] <= 10).length;
     const top15 = keywords.filter(kw => kwBest[kw] && kwBest[kw] <= 15).length;
     const unranked = keywords.filter(kw => !kwBest[kw]).length;
-    const checkedKw = keywords.filter(kw => kwBest[kw] !== undefined).length;
-
-    // 마지막 체크 시간
+    const checkedKw = Object.keys(bRank).length;
     const lastCheck = (lastCheckData && lastCheckData[bKey]) ? lastCheckData[bKey] : '미체크';
 
     return `<div class="card" style="margin-bottom:0">
