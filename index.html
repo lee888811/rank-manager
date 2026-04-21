@@ -1663,7 +1663,7 @@ function renderDashboard() {
     const checkedKw = keywords.filter(kw => kwBest[kw] !== undefined).length;
 
     // 마지막 체크 시간
-    const lastCheck = (lastCheckData && lastCheckData[key]) ? lastCheckData[key] : '미체크';
+    const lastCheck = (lastCheckData && lastCheckData[bKey]) ? lastCheckData[bKey] : '미체크';
 
     return `<div class="card" style="margin-bottom:0">
       <div class="flex-between mb-16">
