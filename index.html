@@ -758,6 +758,7 @@ const db = firebase.database();
 const PROXY = 'https://icy-shadow-25b7.ttlholdings.workers.dev';
 
 let branches = {}, rankings = {}, settings = {};
+  let lastCheckData = {};
 let tempBlogs = [], tempKeywords = [], editingKey = null;
 
 // ===== 로그인 =====
@@ -790,6 +791,7 @@ function initApp() {
   document.getElementById('today-date').textContent = new Date().toLocaleDateString('ko-KR',{year:'numeric',month:'long',day:'numeric',weekday:'short'});
   db.ref('branches').on('value', snap => { branches=snap.val()||{}; renderBranchList(); updateStats(); updateSelects(); });
   db.ref('rankings').on('value', snap => { rankings=snap.val()||{}; renderRankingList(); renderMissingList(); renderDashboard(); updateStats(); });
+  db.ref('lastCheck').on('value', snap => { lastCheckData=snap.val()||{}; renderDashboard(); });
   db.ref('settings').once('value').then(snap => {
     settings=snap.val()||{};
     document.getElementById('set-client-id').value=settings.clientId||'';
