@@ -792,6 +792,7 @@ function initApp() {
   db.ref('branches').on('value', snap => { branches=snap.val()||{}; renderBranchList(); updateStats(); updateSelects(); });
   db.ref('rankings').on('value', snap => { rankings=snap.val()||{}; renderRankingList(); renderMissingList(); renderDashboard(); updateStats(); });
   db.ref('lastCheck').on('value', snap => { lastCheckData=snap.val()||{}; renderDashboard(); });
+  db.ref('keywordVolumes').once('value').then(snap => { window._kwVolumes = snap.val()||{}; renderRankingList(); });
   db.ref('settings').once('value').then(snap => {
     settings=snap.val()||{};
     document.getElementById('set-client-id').value=settings.clientId||'';
@@ -1448,10 +1449,38 @@ function renderRankingList() {
   const empty=document.getElementById('ranking-empty');
   const filter=document.getElementById('rank-branch-filter')?.value||'';
   const limit=parseInt(document.getElementById('rank-limit-filter')?.value||'20');
-  let data=Object.values(rankings);
-  if (filter) data=data.filter(r=>r.branchKey===filter);
-  // 순위 필터 (0이면 전체)
-  if (limit>0) data=data.filter(r=>r.rank&&r.rank<=limit);
+
+  // 새 구조에서 데이터 추출
+  const volumes = window._kwVolumes || {};
+  let data = [];
+
+  Object.entries(rankings).forEach(([bKey, kwMap]) => {
+    if (typeof kwMap !== 'object') return;
+    const branch = branches[bKey];
+    if (!branch) return;
+    if (filter && bKey !== filter) return;
+
+    Object.entries(kwMap).forEach(([kwKey, tabMap]) => {
+      if (typeof tabMap !== 'object') return;
+      // 원본 키워드 찾기
+      const kws = branch.keywords || [];
+      const origKw = kws.find(k => k.replace(/\s/g,'') === kwKey) || kwKey;
+      const vol = volumes[kwKey] || 0;
+
+      ['blog','cafe'].forEach(tab => {
+        if (!tabMap[tab]) return;
+        Object.entries(tabMap[tab]).forEach(([blogId, rank]) => {
+          if (limit > 0 && rank > limit) return;
+          data.push({
+            bKey, branchName: branch.name, keyword: origKw, kwKey,
+            tab: tab === 'blog' ? '블로그' : '카페',
+            blogId, rank, vol
+          });
+        });
+      });
+    });
+  });
+
   if (!data.length) {
     tbody.innerHTML='';
     empty.style.display='block';
@@ -1460,19 +1489,15 @@ function renderRankingList() {
   }
   empty.style.display='none';
   data.sort((a,b)=>(a.rank||999)-(b.rank||999));
+
   tbody.innerHTML=data.map(r=>`<tr>
     <td><strong>${r.branchName}</strong></td>
     <td>${r.keyword}</td>
-    <td><span class="badge ${r.tab==='블로그'?'badge-new':'badge-same'}">${r.tab||'블로그'}</span></td>
+    <td style="text-align:center;color:var(--text3);font-size:12px">${r.vol>0?(r.vol>=1000?(r.vol/1000).toFixed(1)+'K':r.vol):'-'}</td>
+    <td><span class="badge ${r.tab==='블로그'?'badge-new':'badge-same'}">${r.tab}</span></td>
     <td class="text-accent text-sm">${r.blogId}</td>
-    <td class="text-sm">${r.postUrl
-      ? `<a href="${r.postUrl}" target="_blank" style="color:var(--accent);text-decoration:none" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">포스팅 보기 ↗</a>`
-      : `<a href="https://blog.naver.com/${r.blogId}" target="_blank" style="color:var(--text3);font-size:11px">블로그 홈 ↗</a>`
-    }</td>
+    <td class="text-sm"><a href="https://blog.naver.com/${r.blogId}" target="_blank" style="color:var(--text3);font-size:11px">블로그 홈 ↗</a></td>
     <td>${rankBadge(r.rank)}</td>
-    <td>${changeBadge(r.rank,r.prevRank)}</td>
-    <td class="text-muted text-sm">${r.prevRank?r.prevRank+'위':'-'}</td>
-    <td class="text-muted text-sm">${r.checkedAt?new Date(r.checkedAt).toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'}):'-'}</td>
   </tr>`).join('');
 }
 function rankBadge(rank) {
